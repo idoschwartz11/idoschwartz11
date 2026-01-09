@@ -7,8 +7,6 @@ interface ShoppingItemRowProps {
   onToggle: (id: string) => void;
   onUpdateQuantity: (id: string, delta: number) => void;
   onDelete: (id: string) => void;
-  disabled?: boolean;
-  largeText?: boolean;
 }
 
 export const ShoppingItemRow = memo(function ShoppingItemRow({
@@ -16,8 +14,6 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
   onToggle,
   onUpdateQuantity,
   onDelete,
-  disabled,
-  largeText,
 }: ShoppingItemRowProps) {
   const [swipeX, setSwipeX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
@@ -25,14 +21,13 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
   const currentX = useRef(0);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (disabled) return;
     startX.current = e.touches[0].clientX;
     currentX.current = startX.current;
     setIsSwiping(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (disabled || !isSwiping) return;
+    if (!isSwiping) return;
     currentX.current = e.touches[0].clientX;
     const diff = startX.current - currentX.current;
     // Only allow left swipe (positive diff in RTL)
@@ -42,7 +37,6 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
   };
 
   const handleTouchEnd = () => {
-    if (disabled) return;
     setIsSwiping(false);
     if (swipeX > 60) {
       onDelete(item.id);
@@ -59,7 +53,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
       className={`relative overflow-hidden rounded-xl mb-2 ${item.isBought ? 'item-card-bought' : ''}`}
     >
       {/* Delete background */}
-      {!disabled && swipeX > 0 && (
+      {swipeX > 0 && (
         <div className="swipe-delete-bg" style={{ opacity: swipeX / 80 }}>
           <Trash2 className="w-5 h-5 text-destructive-foreground" />
         </div>
@@ -77,21 +71,20 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
       >
         <div className="flex items-center gap-3">
           {/* Checkbox */}
-          {!disabled && (
-            <button
-              onClick={() => onToggle(item.id)}
-              className={`checkbox-ios flex-shrink-0 ${item.isBought ? 'checkbox-ios-checked' : ''}`}
-              aria-label={item.isBought ? 'סמן כלא נקנה' : 'סמן כנקנה'}
-            >
-              {item.isBought && <Check className="w-4 h-4 text-success-foreground" />}
-            </button>
-          )}
+          <button
+            onClick={() => onToggle(item.id)}
+            className={`checkbox-ios flex-shrink-0 ${item.isBought ? 'checkbox-ios-checked' : ''}`}
+            aria-label={item.isBought ? 'סמן כלא נקנה' : 'סמן כנקנה'}
+          >
+            {item.isBought && <Check className="w-4 h-4 text-success-foreground" />}
+          </button>
           
           {/* Item content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-lg">{item.categoryEmoji}</span>
               <span 
-                className={`font-medium ${item.isBought ? 'text-success line-through' : ''} ${largeText ? 'text-xl' : 'text-base'}`}
+                className={`font-medium text-base ${item.isBought ? 'text-success line-through' : ''}`}
               >
                 {item.name}
               </span>
@@ -111,7 +104,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
           </div>
           
           {/* Quantity controls */}
-          {!disabled && !item.isBought && item.quantity >= 1 && (
+          {!item.isBought && item.quantity >= 1 && (
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={() => onUpdateQuantity(item.id, -1)}
