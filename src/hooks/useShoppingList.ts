@@ -1,26 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { ShoppingItem, DeletedItem, GroupedItems } from '@/types/ShoppingItem';
 import { getEstimatedPrice, getItemCategory, getAllCategories } from '@/constants/priceTable';
+import { supabase } from '@/integrations/supabase/client';
 
-const STORAGE_KEY = 'shopping-list-items';
 const HISTORY_KEY = 'shopping-list-history';
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function loadItems(): ShoppingItem[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveItems(items: ShoppingItem[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
 
 function loadHistory(): string[] {
   try {
@@ -36,14 +19,105 @@ function saveHistory(history: string[]): void {
 }
 
 export function useShoppingList() {
-  const [items, setItems] = useState<ShoppingItem[]>(loadItems);
+  const [items, setItems] = useState<ShoppingItem[]>([]);
   const [history, setHistory] = useState<string[]>(loadHistory);
   const [deletedItem, setDeletedItem] = useState<DeletedItem | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Persist items
+  // Load items from database
   useEffect(() => {
-    saveItems(items);
-  }, [items]);
+    const fetchItems = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('shopping_items')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const mappedItems: ShoppingItem[] = (data || []).map(item => {
+          const category = getItemCategory(item.name);
+          return {
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            isBought: item.bought,
+            orderIndex: 0,
+            priceEstimateIls: getEstimatedPrice(item.name),
+            categoryId: category.id,
+            categoryEmoji: category.emoji,
+            createdAt: new Date(item.created_at).getTime(),
+            updatedAt: new Date(item.updated_at).getTime(),
+          };
+        });
+
+        setItems(mappedItems);
+      } catch (error) {
+        console.error('Error fetching items:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchItems();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel('shopping_items_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopping_items'
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newItem = payload.new as any;
+            const category = getItemCategory(newItem.name);
+            const mappedItem: ShoppingItem = {
+              id: newItem.id,
+              name: newItem.name,
+              quantity: newItem.quantity,
+              isBought: newItem.bought,
+              orderIndex: 0,
+              priceEstimateIls: getEstimatedPrice(newItem.name),
+              categoryId: category.id,
+              categoryEmoji: category.emoji,
+              createdAt: new Date(newItem.created_at).getTime(),
+              updatedAt: new Date(newItem.updated_at).getTime(),
+            };
+            setItems(prev => {
+              if (prev.some(i => i.id === mappedItem.id)) return prev;
+              return [mappedItem, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedItem = payload.new as any;
+            setItems(prev => prev.map(item => {
+              if (item.id === updatedItem.id) {
+                return {
+                  ...item,
+                  quantity: updatedItem.quantity,
+                  isBought: updatedItem.bought,
+                  updatedAt: new Date(updatedItem.updated_at).getTime(),
+                };
+              }
+              return item;
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setItems(prev => prev.filter(item => item.id !== deletedId));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Persist history
   useEffect(() => {
@@ -51,83 +125,104 @@ export function useShoppingList() {
   }, [history]);
 
   // Add new item
-  const addItem = useCallback((name: string, quantity: number = 1) => {
+  const addItem = useCallback(async (name: string, quantity: number = 1) => {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    const category = getItemCategory(trimmedName);
-    
-    const newItem: ShoppingItem = {
-      id: generateId(),
-      name: trimmedName,
-      quantity: Math.max(1, quantity),
-      isBought: false,
-      orderIndex: items.filter(i => !i.isBought).length,
-      priceEstimateIls: getEstimatedPrice(trimmedName),
-      categoryId: category.id,
-      categoryEmoji: category.emoji,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    try {
+      const { error } = await supabase
+        .from('shopping_items')
+        .insert({
+          name: trimmedName,
+          quantity: Math.max(1, quantity),
+          bought: false,
+        });
 
-    setItems(prev => [newItem, ...prev]);
+      if (error) throw error;
 
-    // Add to history if not exists
-    if (!history.some(h => h.toLowerCase() === trimmedName.toLowerCase())) {
-      setHistory(prev => [trimmedName, ...prev].slice(0, 100));
+      // Add to history if not exists
+      if (!history.some(h => h.toLowerCase() === trimmedName.toLowerCase())) {
+        setHistory(prev => [trimmedName, ...prev].slice(0, 100));
+      }
+    } catch (error) {
+      console.error('Error adding item:', error);
     }
-  }, [items, history]);
+  }, [history]);
 
   // Toggle bought status
-  const toggleBought = useCallback((id: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === id) {
-        return {
-          ...item,
-          isBought: !item.isBought,
-          updatedAt: Date.now(),
-        };
-      }
-      return item;
-    }));
-  }, []);
+  const toggleBought = useCallback(async (id: string) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    try {
+      const { error } = await supabase
+        .from('shopping_items')
+        .update({ bought: !item.isBought })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error toggling item:', error);
+    }
+  }, [items]);
 
   // Update quantity
-  const updateQuantity = useCallback((id: string, delta: number) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === id) {
-        const newQuantity = Math.max(1, item.quantity + delta);
-        return {
-          ...item,
-          quantity: newQuantity,
-          updatedAt: Date.now(),
-        };
-      }
-      return item;
-    }));
-  }, []);
+  const updateQuantity = useCallback(async (id: string, delta: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    const newQuantity = Math.max(1, item.quantity + delta);
+
+    try {
+      const { error } = await supabase
+        .from('shopping_items')
+        .update({ quantity: newQuantity })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+    }
+  }, [items]);
 
   // Delete item
-  const deleteItem = useCallback((id: string) => {
+  const deleteItem = useCallback(async (id: string) => {
     const itemToDelete = items.find(i => i.id === id);
-    if (itemToDelete) {
-      setDeletedItem({ ...itemToDelete, deletedAt: Date.now() });
-      setItems(prev => prev.filter(item => item.id !== id));
+    if (!itemToDelete) return;
+
+    setDeletedItem({ ...itemToDelete, deletedAt: Date.now() });
+
+    try {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      setDeletedItem(null);
     }
   }, [items]);
 
   // Undo delete
-  const undoDelete = useCallback(() => {
-    if (deletedItem) {
-      const { deletedAt, ...item } = deletedItem;
-      setItems(prev => {
-        const newItems = [...prev, item];
-        return newItems.sort((a, b) => {
-          if (a.isBought !== b.isBought) return a.isBought ? 1 : -1;
-          return a.orderIndex - b.orderIndex;
+  const undoDelete = useCallback(async () => {
+    if (!deletedItem) return;
+
+    try {
+      const { error } = await supabase
+        .from('shopping_items')
+        .insert({
+          id: deletedItem.id,
+          name: deletedItem.name,
+          quantity: deletedItem.quantity,
+          bought: deletedItem.isBought,
         });
-      });
+
+      if (error) throw error;
       setDeletedItem(null);
+    } catch (error) {
+      console.error('Error undoing delete:', error);
     }
   }, [deletedItem]);
 
@@ -137,9 +232,21 @@ export function useShoppingList() {
   }, []);
 
   // Clear bought items
-  const clearBoughtItems = useCallback(() => {
-    setItems(prev => prev.filter(item => !item.isBought));
-  }, []);
+  const clearBoughtItems = useCallback(async () => {
+    const boughtIds = items.filter(i => i.isBought).map(i => i.id);
+    if (boughtIds.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .in('id', boughtIds);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error clearing bought items:', error);
+    }
+  }, [items]);
 
   // Memoized: items grouped by category
   const groupedItems = useMemo((): GroupedItems[] => {
@@ -229,6 +336,7 @@ export function useShoppingList() {
     hasItemsWithPrices,
     hasItems,
     deletedItem,
+    isLoading,
     addItem,
     toggleBought,
     updateQuantity,
