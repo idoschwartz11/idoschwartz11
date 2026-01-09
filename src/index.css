@@ -6,41 +6,41 @@
 
 @layer base {
   :root {
-    --background: 35 30% 98%;
-    --foreground: 220 20% 15%;
+    --background: 45 35% 97%;
+    --foreground: 220 25% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 15%;
+    --card-foreground: 220 25% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 15%;
+    --popover-foreground: 220 25% 12%;
 
-    --primary: 174 62% 40%;
+    --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 35 40% 95%;
-    --secondary-foreground: 220 20% 20%;
+    --secondary: 45 50% 94%;
+    --secondary-foreground: 220 20% 18%;
 
-    --muted: 35 20% 92%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 45 25% 91%;
+    --muted-foreground: 220 12% 42%;
 
-    --accent: 174 50% 92%;
-    --accent-foreground: 174 62% 30%;
+    --accent: 340 82% 52%;
+    --accent-foreground: 0 0% 100%;
 
-    --success: 152 60% 40%;
+    --success: 152 65% 42%;
     --success-foreground: 0 0% 100%;
-    --success-light: 152 50% 94%;
+    --success-light: 152 55% 92%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 75% 55%;
     --destructive-foreground: 0 0% 100%;
-    --destructive-light: 0 70% 95%;
+    --destructive-light: 0 72% 94%;
 
-    --warning: 38 92% 50%;
+    --warning: 38 95% 52%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 174 62% 40%;
+    --border: 220 15% 86%;
+    --input: 220 15% 86%;
+    --ring: 262 83% 58%;
 
     --radius: 1rem;
 
@@ -50,38 +50,38 @@
   }
 
   .dark {
-    --background: 220 20% 10%;
-    --foreground: 35 20% 95%;
+    --background: 260 15% 10%;
+    --foreground: 45 20% 95%;
 
-    --card: 220 20% 13%;
-    --card-foreground: 35 20% 95%;
+    --card: 260 15% 14%;
+    --card-foreground: 45 20% 95%;
 
-    --popover: 220 20% 13%;
-    --popover-foreground: 35 20% 95%;
+    --popover: 260 15% 14%;
+    --popover-foreground: 45 20% 95%;
 
-    --primary: 174 62% 45%;
+    --primary: 262 75% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 18%;
-    --secondary-foreground: 35 20% 90%;
+    --secondary: 260 12% 20%;
+    --secondary-foreground: 45 20% 90%;
 
-    --muted: 220 15% 20%;
-    --muted-foreground: 220 10% 60%;
+    --muted: 260 12% 22%;
+    --muted-foreground: 220 10% 58%;
 
-    --accent: 174 40% 20%;
-    --accent-foreground: 174 50% 80%;
+    --accent: 340 75% 55%;
+    --accent-foreground: 0 0% 100%;
 
-    --success: 152 55% 45%;
+    --success: 152 55% 48%;
     --success-foreground: 0 0% 100%;
-    --success-light: 152 40% 18%;
+    --success-light: 152 35% 20%;
 
-    --destructive: 0 65% 55%;
+    --destructive: 0 68% 58%;
     --destructive-foreground: 0 0% 100%;
-    --destructive-light: 0 50% 18%;
+    --destructive-light: 0 50% 20%;
 
-    --border: 220 15% 22%;
-    --input: 220 15% 22%;
-    --ring: 174 62% 45%;
+    --border: 260 12% 24%;
+    --input: 260 12% 24%;
+    --ring: 262 75% 60%;
   }
 }
 
@@ -129,7 +129,7 @@
 
   .quantity-pill {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-sm font-medium;
-    @apply bg-accent text-accent-foreground;
+    @apply bg-primary/15 text-primary;
   }
 
   .price-label {
