@@ -1,8 +1,9 @@
-import { memo, useState, useRef } from 'react';
-import { Check, Minus, Plus, Trash2 } from 'lucide-react';
+import { memo, useState, useRef, useMemo } from 'react';
+import { Check, Minus, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ShoppingItem } from '@/types/ShoppingItem';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { getCategoryColor, EXPENSIVE_THRESHOLD } from '@/constants/categoryColors';
 
 interface ShoppingItemRowProps {
   item: ShoppingItem;
@@ -56,9 +57,16 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
     setShowDeleteDialog(false);
   };
 
-  const estimatedPrice = item.priceEstimateIls 
-    ? (item.priceEstimateIls * item.quantity).toFixed(2)
-    : null;
+  // Memoize computed cost and expensive flag
+  const { estimatedPrice, isExpensive } = useMemo(() => {
+    const cost = item.priceEstimateIls ? item.priceEstimateIls * item.quantity : null;
+    return {
+      estimatedPrice: cost ? cost.toFixed(2) : null,
+      isExpensive: cost !== null && cost >= EXPENSIVE_THRESHOLD,
+    };
+  }, [item.priceEstimateIls, item.quantity]);
+
+  const categoryColor = getCategoryColor(item.categoryId);
 
   return (
     <>
@@ -78,7 +86,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
         )}
         
         <div 
-          className="item-card p-3 relative bg-card"
+          className="item-card p-3 relative bg-card flex"
           style={{ 
             transform: `translateX(${swipeX}px)`,
             transition: isSwiping ? 'none' : 'transform 0.2s ease-out'
@@ -87,7 +95,10 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="flex items-center gap-3">
+          {/* Category color indicator */}
+          <div className={`w-1 self-stretch rounded-full ml-3 ${categoryColor.indicator}`} />
+          
+          <div className="flex items-center gap-3 flex-1">
             {/* Checkbox */}
             <button
               onClick={() => onToggle(item.id)}
@@ -106,6 +117,13 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
                 >
                   {item.name}
                 </span>
+                
+                {/* Expensive indicator */}
+                {isExpensive && !item.isBought && (
+                  <span className="text-orange-500 dark:text-orange-400" title="פריט יקר">
+                    <AlertTriangle className="w-4 h-4" />
+                  </span>
+                )}
                 
                 {item.quantity > 1 && (
                   <span className="quantity-pill">
