@@ -2,95 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 35 30% 98%;
+    --foreground: 220 20% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 20% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 220 20% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 174 62% 40%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 35 40% 95%;
+    --secondary-foreground: 220 20% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 35 20% 92%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 174 50% 92%;
+    --accent-foreground: 174 62% 30%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 152 50% 94%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-light: 0 70% 95%;
 
-    --radius: 0.5rem;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
 
-    --sidebar-background: 0 0% 98%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 174 62% 40%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --radius: 1rem;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --header-height: 3.5rem;
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 220 20% 10%;
+    --foreground: 35 20% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 20% 13%;
+    --card-foreground: 35 20% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 220 20% 13%;
+    --popover-foreground: 35 20% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 174 62% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 35 20% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 220 15% 20%;
+    --muted-foreground: 220 10% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 174 40% 20%;
+    --accent-foreground: 174 50% 80%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --success: 152 55% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 152 40% 18%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-light: 0 50% 18%;
+
+    --border: 220 15% 22%;
+    --input: 220 15% 22%;
+    --ring: 174 62% 45%;
   }
 }
 
@@ -99,7 +90,212 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: 'Heebo', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-background text-foreground;
+    direction: rtl;
   }
+}
+
+@layer components {
+  .ios-header {
+    @apply fixed top-0 left-0 right-0 z-50 bg-primary text-primary-foreground;
+    padding-top: var(--safe-area-top);
+  }
+
+  .ios-header-content {
+    @apply flex items-center justify-between px-4;
+    height: var(--header-height);
+  }
+
+  .ios-content {
+    padding-top: calc(var(--header-height) + var(--safe-area-top));
+    padding-bottom: calc(1rem + var(--safe-area-bottom));
+    min-height: 100dvh;
+  }
+
+  .item-card {
+    @apply bg-card rounded-xl shadow-sm border border-border/50 transition-all duration-200;
+  }
+
+  .item-card-bought {
+    @apply opacity-70;
+  }
+
+  .quantity-pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-sm font-medium;
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .price-label {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .total-card {
+    @apply bg-gradient-to-l from-primary/10 to-accent/30 rounded-xl p-3 border border-primary/20;
+  }
+
+  .section-header {
+    @apply flex items-center gap-2 text-sm font-semibold text-muted-foreground py-2 px-1;
+  }
+
+  .add-input {
+    @apply w-full bg-card border border-border rounded-xl px-4 py-3 text-base placeholder:text-muted-foreground/60;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary;
+    @apply transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-medium;
+    @apply bg-primary text-primary-foreground;
+    @apply active:scale-[0.98] transition-all duration-150;
+    @apply disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium;
+    @apply bg-secondary text-secondary-foreground;
+    @apply active:scale-[0.98] transition-all duration-150;
+  }
+
+  .btn-destructive {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium;
+    @apply bg-destructive-light text-destructive;
+    @apply active:scale-[0.98] transition-all duration-150;
+  }
+
+  .btn-icon {
+    @apply w-9 h-9 rounded-full flex items-center justify-center;
+    @apply active:scale-[0.95] transition-transform duration-100;
+  }
+
+  .btn-quantity {
+    @apply w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold;
+    @apply bg-secondary text-secondary-foreground;
+    @apply active:scale-[0.92] transition-transform duration-100;
+  }
+
+  .mode-toggle {
+    @apply flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm;
+    @apply transition-all duration-200;
+  }
+
+  .mode-toggle-active {
+    @apply bg-warning text-warning-foreground shadow-md;
+  }
+
+  .mode-toggle-inactive {
+    @apply bg-secondary text-secondary-foreground;
+  }
+
+  .autocomplete-dropdown {
+    @apply absolute top-full right-0 left-0 mt-1 bg-card rounded-xl shadow-lg border border-border z-50;
+    @apply max-h-48 overflow-y-auto;
+  }
+
+  .autocomplete-item {
+    @apply px-4 py-3 text-right cursor-pointer;
+    @apply hover:bg-accent/50 active:bg-accent transition-colors duration-100;
+    @apply border-b border-border/50 last:border-b-0;
+  }
+
+  .toast-container {
+    @apply fixed bottom-20 left-4 right-4 z-50;
+    padding-bottom: var(--safe-area-bottom);
+  }
+
+  .toast {
+    @apply bg-foreground text-background rounded-xl px-4 py-3 shadow-xl;
+    @apply flex items-center justify-between gap-3;
+    @apply animate-fade-in;
+  }
+
+  .info-sheet {
+    @apply fixed inset-x-0 bottom-0 bg-card rounded-t-3xl shadow-2xl z-50;
+    @apply p-6 pb-8;
+    padding-bottom: calc(2rem + var(--safe-area-bottom));
+    @apply animate-slide-up;
+  }
+
+  .info-sheet-backdrop {
+    @apply fixed inset-0 bg-black/40 z-40 animate-fade-in;
+  }
+
+  .swipe-delete-bg {
+    @apply absolute inset-y-0 left-0 w-20 bg-destructive rounded-l-xl;
+    @apply flex items-center justify-center;
+  }
+
+  .checkbox-ios {
+    @apply w-6 h-6 rounded-full border-2 border-border flex items-center justify-center;
+    @apply transition-all duration-200;
+  }
+
+  .checkbox-ios-checked {
+    @apply bg-success border-success;
+  }
+}
+
+@layer utilities {
+  .text-success {
+    color: hsl(var(--success));
+  }
+
+  .bg-success {
+    background-color: hsl(var(--success));
+  }
+
+  .bg-success-light {
+    background-color: hsl(var(--success-light));
+  }
+
+  .text-destructive {
+    color: hsl(var(--destructive));
+  }
+
+  .bg-destructive-light {
+    background-color: hsl(var(--destructive-light));
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.15s ease-out;
+  }
+
+  .animate-total-change {
+    animation: totalPulse 0.25s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes totalPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+  100% { transform: scale(1); }
 }
