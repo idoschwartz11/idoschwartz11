@@ -44,7 +44,7 @@
 
     --radius: 1rem;
 
-    --header-height: 4.5rem;
+    --header-height: 2.5rem;
     --safe-area-top: env(safe-area-inset-top, 0px);
     --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   }
