@@ -8,6 +8,7 @@ import { CategoryGroup } from './CategoryGroup';
 import { UndoToast } from './UndoToast';
 import { ShareSheet } from './ShareSheet';
 import { AISuggestions } from './AISuggestions';
+import { ImageScanner } from './ImageScanner';
 import { CleanListModeProvider, useCleanListMode } from '@/contexts/CleanListModeContext';
 
 function ShoppingListContent() {
@@ -57,6 +58,14 @@ function ShoppingListContent() {
           <TotalSummary 
             total={estimatedTotal} 
             hasItemsWithPrices={hasItemsWithPrices} 
+          />
+        )}
+
+        {/* Image Scanner - hidden in clean mode */}
+        {!isCleanMode && (
+          <ImageScanner 
+            currentItems={currentItemNames} 
+            onAddItems={(names) => names.forEach(name => addItem(name))} 
           />
         )}
 
