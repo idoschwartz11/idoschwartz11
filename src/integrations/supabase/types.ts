@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      price_cache: {
+        Row: {
+          avg_price_ils: number | null
+          cached_at: string
+          canonical_key: string | null
+          confidence: number | null
+          expires_at: string
+          id: string
+          query: string
+          sample_count: number | null
+        }
+        Insert: {
+          avg_price_ils?: number | null
+          cached_at?: string
+          canonical_key?: string | null
+          confidence?: number | null
+          expires_at?: string
+          id?: string
+          query: string
+          sample_count?: number | null
+        }
+        Update: {
+          avg_price_ils?: number | null
+          cached_at?: string
+          canonical_key?: string | null
+          confidence?: number | null
+          expires_at?: string
+          id?: string
+          query?: string
+          sample_count?: number | null
+        }
+        Relationships: []
+      }
+      price_lookup: {
+        Row: {
+          avg_price_ils: number
+          canonical_key: string
+          category: string | null
+          created_at: string
+          id: string
+          sample_count: number
+          updated_at: string
+        }
+        Insert: {
+          avg_price_ils: number
+          canonical_key: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          sample_count?: number
+          updated_at?: string
+        }
+        Update: {
+          avg_price_ils?: number
+          canonical_key?: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          sample_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shopping_items: {
         Row: {
           bought: boolean
