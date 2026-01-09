@@ -23,6 +23,7 @@ async function findDirectMatch(
   query: string
 ): Promise<{ canonical_key: string; avg_price_ils: number; sample_count: number } | null> {
   const normalized = normalizeText(query);
+  const queryWords = normalized.split(' ').filter(w => w.length > 0);
   
   // Try exact match first
   const { data: exactMatch } = await supabase
@@ -34,19 +35,54 @@ async function findDirectMatch(
   
   if (exactMatch) return exactMatch;
   
-  // Try partial match - query contains key or key contains query
-  const { data: partialMatches } = await supabase
+  // Fetch all keys for more sophisticated matching
+  const { data: allItems } = await supabase
     .from('price_lookup')
-    .select('canonical_key, avg_price_ils, sample_count')
-    .or(`canonical_key.ilike.%${normalized}%`)
-    .limit(10);
+    .select('canonical_key, avg_price_ils, sample_count');
   
-  if (partialMatches && partialMatches.length > 0) {
-    // Find best match - prefer shorter keys (more generic)
-    const sorted = partialMatches.sort((a: any, b: any) => 
-      a.canonical_key.length - b.canonical_key.length
-    );
-    return sorted[0];
+  if (!allItems || allItems.length === 0) return null;
+  
+  // Score each item based on matching
+  const scoredItems = allItems.map((item: any) => {
+    const key = normalizeText(item.canonical_key);
+    const keyWords = key.split(' ').filter((w: string) => w.length > 0);
+    let score = 0;
+    
+    // Exact match gets highest score
+    if (key === normalized) {
+      score = 1000;
+    }
+    // Query is contained in key (e.g., "קארי" matches "קארי אדום")
+    else if (key.includes(normalized)) {
+      // Shorter keys are better (more specific match)
+      score = 100 + (50 / key.length);
+    }
+    // Key is contained in query (e.g., "קארי אדום מתוק" matches "קארי אדום")
+    else if (normalized.includes(key)) {
+      score = 80 + (40 / key.length);
+    }
+    // Check word-by-word matching
+    else {
+      const matchingWords = queryWords.filter(qw => 
+        keyWords.some((kw: string) => kw.includes(qw) || qw.includes(kw))
+      );
+      if (matchingWords.length > 0) {
+        // Score based on percentage of query words matched
+        score = (matchingWords.length / queryWords.length) * 60;
+      }
+    }
+    
+    return { ...item, score };
+  });
+  
+  // Filter items with positive score and sort by score descending
+  const matches = scoredItems
+    .filter((item: any) => item.score > 0)
+    .sort((a: any, b: any) => b.score - a.score);
+  
+  if (matches.length > 0) {
+    console.log(`Partial match: "${normalized}" -> "${matches[0].canonical_key}" (score: ${matches[0].score})`);
+    return matches[0];
   }
   
   return null;
