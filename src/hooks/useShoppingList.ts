@@ -1,9 +1,51 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { ShoppingItem, DeletedItem, GroupedItems } from '@/types/ShoppingItem';
-import { getEstimatedPrice, getItemCategory, getAllCategories } from '@/constants/priceTable';
+import { getItemCategory, getAllCategories } from '@/constants/priceTable';
 import { supabase } from '@/integrations/supabase/client';
 
 const HISTORY_KEY = 'shopping-list-history';
+const PRICE_CACHE_KEY = 'national-price-cache-v1';
+const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+interface PriceCacheEntry {
+  avgPriceIls: number | null;
+  confidence: number | null;
+  cachedAt: number;
+}
+
+function loadPriceCache(): Map<string, PriceCacheEntry> {
+  try {
+    const stored = localStorage.getItem(PRICE_CACHE_KEY);
+    if (!stored) return new Map();
+    const parsed = JSON.parse(stored);
+    const now = Date.now();
+    const entries: [string, PriceCacheEntry][] = Object.entries(parsed)
+      .filter(([, entry]: [string, any]) => now - entry.cachedAt < CACHE_DURATION_MS)
+      .map(([key, entry]: [string, any]) => [key, entry as PriceCacheEntry]);
+    return new Map(entries);
+  } catch {
+    return new Map();
+  }
+}
+
+function savePriceCache(cache: Map<string, PriceCacheEntry>): void {
+  try {
+    const obj = Object.fromEntries(cache.entries());
+    localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(obj));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function normalizeQuery(query: string): string {
+  return query
+    .trim()
+    .toLowerCase()
+    .replace(/[״"'`]/g, '')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function loadHistory(): string[] {
   try {
@@ -23,6 +65,91 @@ export function useShoppingList() {
   const [history, setHistory] = useState<string[]>(loadHistory);
   const [deletedItem, setDeletedItem] = useState<DeletedItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const priceCacheRef = useRef<Map<string, PriceCacheEntry>>(loadPriceCache());
+  const pendingPricesRef = useRef<Set<string>>(new Set());
+
+  // Fetch price from national average API
+  const fetchPrice = useCallback(async (itemName: string): Promise<number | null> => {
+    const normalized = normalizeQuery(itemName);
+    if (!normalized) return null;
+
+    // Check local cache
+    const cached = priceCacheRef.current.get(normalized);
+    if (cached) {
+      return cached.avgPriceIls;
+    }
+
+    // Skip if already fetching
+    if (pendingPricesRef.current.has(normalized)) {
+      return null;
+    }
+
+    pendingPricesRef.current.add(normalized);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/national-average?query=${encodeURIComponent(itemName)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error('Price fetch failed:', response.status);
+        return null;
+      }
+
+      const result = await response.json();
+      
+      const entry: PriceCacheEntry = {
+        avgPriceIls: result.avgPriceIls ?? null,
+        confidence: result.confidence ?? null,
+        cachedAt: Date.now(),
+      };
+
+      priceCacheRef.current.set(normalized, entry);
+      savePriceCache(priceCacheRef.current);
+      
+      return entry.avgPriceIls;
+    } catch (error) {
+      console.error('Price fetch error:', error);
+      return null;
+    } finally {
+      pendingPricesRef.current.delete(normalized);
+    }
+  }, []);
+
+  // Update item price in state
+  const updateItemPrice = useCallback((itemId: string, price: number | null) => {
+    setItems(prev => prev.map(item => 
+      item.id === itemId ? { ...item, priceEstimateIls: price } : item
+    ));
+  }, []);
+
+  // Fetch prices for items that don't have them
+  const fetchMissingPrices = useCallback(async (itemsToFetch: ShoppingItem[]) => {
+    for (const item of itemsToFetch) {
+      const normalized = normalizeQuery(item.name);
+      const cached = priceCacheRef.current.get(normalized);
+      
+      if (cached) {
+        if (item.priceEstimateIls !== cached.avgPriceIls) {
+          updateItemPrice(item.id, cached.avgPriceIls);
+        }
+      } else if (!pendingPricesRef.current.has(normalized)) {
+        // Fetch in background
+        fetchPrice(item.name).then(price => {
+          if (price !== null) {
+            updateItemPrice(item.id, price);
+          }
+        });
+      }
+    }
+  }, [fetchPrice, updateItemPrice]);
 
   // Load items from database
   useEffect(() => {
@@ -37,13 +164,16 @@ export function useShoppingList() {
 
         const mappedItems: ShoppingItem[] = (data || []).map(item => {
           const category = getItemCategory(item.name);
+          const normalized = normalizeQuery(item.name);
+          const cached = priceCacheRef.current.get(normalized);
+          
           return {
             id: item.id,
             name: item.name,
             quantity: item.quantity,
             isBought: item.bought,
             orderIndex: 0,
-            priceEstimateIls: getEstimatedPrice(item.name),
+            priceEstimateIls: cached?.avgPriceIls ?? null,
             categoryId: category.id,
             categoryEmoji: category.emoji,
             createdAt: new Date(item.created_at).getTime(),
@@ -52,6 +182,9 @@ export function useShoppingList() {
         });
 
         setItems(mappedItems);
+        
+        // Fetch missing prices in background
+        setTimeout(() => fetchMissingPrices(mappedItems), 100);
       } catch (error) {
         console.error('Error fetching items:', error);
       } finally {
@@ -75,22 +208,35 @@ export function useShoppingList() {
           if (payload.eventType === 'INSERT') {
             const newItem = payload.new as any;
             const category = getItemCategory(newItem.name);
+            const normalized = normalizeQuery(newItem.name);
+            const cached = priceCacheRef.current.get(normalized);
+            
             const mappedItem: ShoppingItem = {
               id: newItem.id,
               name: newItem.name,
               quantity: newItem.quantity,
               isBought: newItem.bought,
               orderIndex: 0,
-              priceEstimateIls: getEstimatedPrice(newItem.name),
+              priceEstimateIls: cached?.avgPriceIls ?? null,
               categoryId: category.id,
               categoryEmoji: category.emoji,
               createdAt: new Date(newItem.created_at).getTime(),
               updatedAt: new Date(newItem.updated_at).getTime(),
             };
+            
             setItems(prev => {
               if (prev.some(i => i.id === mappedItem.id)) return prev;
               return [mappedItem, ...prev];
             });
+            
+            // Fetch price for new item
+            if (!cached) {
+              fetchPrice(newItem.name).then(price => {
+                if (price !== null) {
+                  updateItemPrice(newItem.id, price);
+                }
+              });
+            }
           } else if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as any;
             setItems(prev => prev.map(item => {
@@ -117,7 +263,7 @@ export function useShoppingList() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchMissingPrices, fetchPrice, updateItemPrice]);
 
   // Persist history
   useEffect(() => {

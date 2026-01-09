@@ -54,9 +54,11 @@ export const TotalSummary = memo(function TotalSummary({
             onClick={() => setShowInfo(false)}
           />
           <div className="info-sheet">
-            <h3 className="text-lg font-bold mb-3">מידע</h3>
+            <h3 className="text-lg font-bold mb-3">מידע על המחירים</h3>
             <p className="text-muted-foreground leading-relaxed">
-              הסכום מחושב לפי מחירים ממוצעים משוערים בלבד, וייתכן שאינו מדויק.
+              הסכום מחושב לפי מחירים ממוצעים ארציים ממאגר נתוני הסופרמרקטים הישראליים.
+              המחירים מתעדכנים מעת לעת ומבוססים על דגימות מרשתות שונות.
+              ייתכנו הבדלים בין המחיר המוצג למחיר בפועל בסניף הספציפי.
             </p>
             <button
               onClick={() => setShowInfo(false)}

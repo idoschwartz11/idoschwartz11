@@ -134,7 +134,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
               
               {estimatedPrice && !item.isBought && (
                 <p className="price-label mt-0.5">
-                  ממוצע משוער: ₪{estimatedPrice}
+                  ממוצע ארצי משוער: ₪{estimatedPrice}
                 </p>
               )}
             </div>
