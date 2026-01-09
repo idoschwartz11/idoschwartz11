@@ -24,7 +24,7 @@ export const Header = memo(function Header({ onShare }: HeaderProps) {
               className="btn-icon text-primary-foreground/90 hover:text-primary-foreground"
               aria-label="שיתוף"
             >
-              <Share2 className="w-5 h-10" />
+              <Share2 className="w-2 h-2" />
             </button>
           )}
         </div>
