@@ -13,7 +13,7 @@ export const Header = memo(function Header({ onShare }: HeaderProps) {
   return (
     <header className="ios-header">
       <div className="ios-header-content">
-        <div className="flex items-center gap-9">
+        <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold">{isCleanMode ? "רשימת קניות" : "הרשימה שלי"}</h1>
         </div>
         <div className="flex items-center gap-2">
