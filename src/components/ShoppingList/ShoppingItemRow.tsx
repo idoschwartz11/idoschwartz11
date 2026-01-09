@@ -1,5 +1,6 @@
 import { memo, useState, useRef } from 'react';
 import { Check, Minus, Plus, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ShoppingItem } from '@/types/ShoppingItem';
 
 interface ShoppingItemRowProps {
@@ -49,7 +50,12 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
     : null;
 
   return (
-    <div 
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: 30, scale: 0.95 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -30, scale: 0.95 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
       className={`relative overflow-hidden rounded-xl mb-2 ${item.isBought ? 'item-card-bought' : ''}`}
     >
       {/* Delete background */}
@@ -127,6 +133,6 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 });

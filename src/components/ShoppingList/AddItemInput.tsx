@@ -74,7 +74,7 @@ export const AddItemInput = memo(function AddItemInput({
   if (disabled) return null;
 
   return (
-    <form onSubmit={handleSubmit} className="mb-4 relative">
+    <form onSubmit={handleSubmit} className="mb-4 mt-4 relative">
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <input
