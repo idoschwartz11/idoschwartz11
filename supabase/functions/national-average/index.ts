@@ -209,6 +209,36 @@ serve(async (req) => {
       .single();
 
     if (cached) {
+      // If cache has null result, maybe item was added since - recheck
+      if (cached.canonical_key === null) {
+        console.log('Cache has null, rechecking price_lookup...');
+        const directMatch = await findDirectMatch(supabase, normalizedQuery);
+        
+        if (directMatch) {
+          console.log('Found new match after null cache:', directMatch);
+          // Update cache with new result
+          await supabase.from('price_cache').update({
+            canonical_key: directMatch.canonical_key,
+            avg_price_ils: directMatch.avg_price_ils,
+            sample_count: directMatch.sample_count,
+            confidence: 1.0,
+            cached_at: new Date().toISOString()
+          }).eq('query', normalizedQuery);
+          
+          return new Response(JSON.stringify({
+            query: query,
+            canonicalKey: directMatch.canonical_key,
+            avgPriceIls: Number(directMatch.avg_price_ils),
+            confidence: 1.0,
+            sampleCount: directMatch.sample_count,
+            updatedAt: new Date().toISOString(),
+            cached: false,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+      
       console.log('Cache hit:', cached);
       return new Response(JSON.stringify({
         query: query,
