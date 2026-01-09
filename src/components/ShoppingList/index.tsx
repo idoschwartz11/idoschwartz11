@@ -17,6 +17,7 @@ export default function ShoppingList() {
     hasItemsWithPrices,
     hasItems,
     deletedItem,
+    isLoading,
     addItem,
     toggleBought,
     updateQuantity,
