@@ -1,8 +1,11 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GroupedItems } from '@/types/ShoppingItem';
 import { ShoppingItemRow } from './ShoppingItemRow';
+import { CleanModeItemRow } from './CleanModeItemRow';
+import { useCleanListMode } from '@/contexts/CleanListModeContext';
+import { getCategoryColor } from '@/constants/categoryColors';
 
 interface CategoryGroupProps {
   group: GroupedItems;
@@ -19,35 +22,47 @@ export const CategoryGroup = memo(function CategoryGroup({
 }: CategoryGroupProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showBought, setShowBought] = useState(false);
+  const { isCleanMode } = useCleanListMode();
+  
   const hasUnbought = group.unboughtItems.length > 0;
   const hasBought = group.boughtItems.length > 0;
+  
+  const categoryColor = getCategoryColor(group.categoryId);
+
+  // In clean mode, only show if there are unbought items
+  if (isCleanMode && !hasUnbought) {
+    return null;
+  }
 
   return (
     <section className="mb-4">
       {/* Category Header - Clickable */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="category-header w-full flex items-center gap-2 mb-2 px-2 py-2 rounded-xl hover:bg-accent/10 transition-colors"
+        onClick={() => !isCleanMode && setIsExpanded(!isExpanded)}
+        className={`category-header w-full flex items-center gap-2 mb-2 px-3 py-2 rounded-xl transition-colors ${categoryColor.bg} ${!isCleanMode ? 'hover:opacity-80' : ''}`}
+        disabled={isCleanMode}
       >
         <span className="text-xl">{group.categoryEmoji}</span>
         <span className="font-semibold text-foreground">{group.categoryTitle}</span>
-        {hasUnbought && (
+        {hasUnbought && !isCleanMode && (
           <span className="text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-medium">
             {group.unboughtItems.length}
           </span>
         )}
-        <motion.span 
-          className="mr-auto text-muted-foreground"
-          animate={{ rotate: isExpanded ? 0 : -90 }}
-          transition={{ duration: 0.2 }}
-        >
-          <ChevronDown className="w-4 h-4" />
-        </motion.span>
+        {!isCleanMode && (
+          <motion.span 
+            className="mr-auto text-muted-foreground"
+            animate={{ rotate: isExpanded ? 0 : -90 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-4 h-4" />
+          </motion.span>
+        )}
       </button>
 
       {/* Collapsible Content */}
       <AnimatePresence initial={false}>
-        {isExpanded && (
+        {(isExpanded || isCleanMode) && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -58,18 +73,26 @@ export const CategoryGroup = memo(function CategoryGroup({
             {/* Unbought items */}
             <AnimatePresence mode="popLayout">
               {group.unboughtItems.map(item => (
-                <ShoppingItemRow
-                  key={item.id}
-                  item={item}
-                  onToggle={onToggle}
-                  onUpdateQuantity={onUpdateQuantity}
-                  onDelete={onDelete}
-                />
+                isCleanMode ? (
+                  <CleanModeItemRow
+                    key={item.id}
+                    item={item}
+                    onToggle={onToggle}
+                  />
+                ) : (
+                  <ShoppingItemRow
+                    key={item.id}
+                    item={item}
+                    onToggle={onToggle}
+                    onUpdateQuantity={onUpdateQuantity}
+                    onDelete={onDelete}
+                  />
+                )
               ))}
             </AnimatePresence>
 
-            {/* Bought items in this category */}
-            {hasBought && (
+            {/* Bought items in this category - hidden in clean mode */}
+            {hasBought && !isCleanMode && (
               <div className="mt-2">
                 <button
                   onClick={() => setShowBought(!showBought)}
