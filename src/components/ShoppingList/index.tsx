@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useShoppingList } from '@/hooks/useShoppingList';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { Header } from './Header';
 import { TotalSummary } from './TotalSummary';
 import { AddItemInput } from './AddItemInput';
@@ -32,6 +33,7 @@ function ShoppingListContent() {
     getShareableText,
   } = useShoppingList();
 
+  const { isOnline, isSyncing, pendingCount } = useOfflineSync();
   const [showShareSheet, setShowShareSheet] = useState(false);
   const { isCleanMode } = useCleanListMode();
 
@@ -50,14 +52,20 @@ function ShoppingListContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onShare={handleShare} />
+      <Header 
+        onShare={handleShare}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        pendingCount={pendingCount}
+      />
       
       <main className="ios-content px-4">
         {/* Total Summary - hidden in clean mode */}
         {!isCleanMode && (
           <TotalSummary 
             total={estimatedTotal} 
-            hasItemsWithPrices={hasItemsWithPrices} 
+            hasItemsWithPrices={hasItemsWithPrices}
+            items={items}
           />
         )}
 

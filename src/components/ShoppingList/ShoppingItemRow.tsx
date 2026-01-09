@@ -1,8 +1,9 @@
 import { memo, useState, useMemo } from 'react';
 import { Check, Minus, Plus, Trash2, AlertTriangle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingItem } from '@/types/ShoppingItem';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { ChainPricePopup } from './ChainPricePopup';
 import { getCategoryColor, EXPENSIVE_THRESHOLD } from '@/constants/categoryColors';
 
 interface ShoppingItemRowProps {
@@ -19,6 +20,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
   onDelete,
 }: ShoppingItemRowProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPricePopup, setShowPricePopup] = useState(false);
 
   const handleDeleteClick = () => {
     setShowDeleteDialog(true);
@@ -89,9 +91,12 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
               </div>
               
               {estimatedPrice && !item.isBought && (
-                <p className="price-label mt-0.5">
-                  ממוצע ארצי משוער: ₪{estimatedPrice}
-                </p>
+                <button
+                  onClick={() => setShowPricePopup(true)}
+                  className="price-label mt-0.5 hover:text-primary cursor-pointer transition-colors"
+                >
+                  ממוצע ארצי משוער: ₪{estimatedPrice} • לחץ להשוואה
+                </button>
               )}
             </div>
             
@@ -127,6 +132,15 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
         onConfirm={handleConfirmDelete}
         itemName={item.name}
       />
+
+      <AnimatePresence>
+        {showPricePopup && (
+          <ChainPricePopup
+            itemName={item.name}
+            onClose={() => setShowPricePopup(false)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 });
