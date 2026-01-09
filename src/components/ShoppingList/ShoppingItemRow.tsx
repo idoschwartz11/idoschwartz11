@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useMemo } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { Check, Minus, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ShoppingItem } from '@/types/ShoppingItem';
@@ -18,35 +18,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
   onUpdateQuantity,
   onDelete,
 }: ShoppingItemRowProps) {
-  const [swipeX, setSwipeX] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const startX = useRef(0);
-  const currentX = useRef(0);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    currentX.current = startX.current;
-    setIsSwiping(true);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isSwiping) return;
-    currentX.current = e.touches[0].clientX;
-    const diff = startX.current - currentX.current;
-    // Only allow left swipe (positive diff in RTL)
-    if (diff > 0) {
-      setSwipeX(Math.min(diff, 80));
-    }
-  };
-
-  const handleTouchEnd = () => {
-    setIsSwiping(false);
-    if (swipeX > 60) {
-      setShowDeleteDialog(true);
-    }
-    setSwipeX(0);
-  };
 
   const handleDeleteClick = () => {
     setShowDeleteDialog(true);
@@ -78,23 +50,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
         transition={{ duration: 0.2, ease: "easeOut" }}
         className={`relative overflow-hidden rounded-xl mb-2 ${item.isBought ? 'item-card-bought' : ''}`}
       >
-        {/* Delete background */}
-        {swipeX > 0 && (
-          <div className="swipe-delete-bg" style={{ opacity: swipeX / 80 }}>
-            <Trash2 className="w-5 h-5 text-destructive-foreground" />
-          </div>
-        )}
-        
-        <div 
-          className="item-card p-3 relative bg-card flex"
-          style={{ 
-            transform: `translateX(${swipeX}px)`,
-            transition: isSwiping ? 'none' : 'transform 0.2s ease-out'
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
+        <div className="item-card p-3 relative bg-card flex">
           {/* Category color indicator */}
           <div className={`w-1 self-stretch rounded-full ml-3 ${categoryColor.indicator}`} />
           
