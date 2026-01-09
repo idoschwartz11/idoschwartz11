@@ -107,12 +107,11 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
           {!item.isBought && item.quantity >= 1 && (
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
-                onClick={() => onUpdateQuantity(item.id, -1)}
-                className="btn-quantity"
-                disabled={item.quantity <= 1}
-                aria-label="הפחת כמות"
+                onClick={() => item.quantity === 1 ? onDelete(item.id) : onUpdateQuantity(item.id, -1)}
+                className={`btn-quantity ${item.quantity === 1 ? 'bg-destructive-light text-destructive' : ''}`}
+                aria-label={item.quantity === 1 ? 'מחק פריט' : 'הפחת כמות'}
               >
-                <Minus className="w-3 h-3" />
+                {item.quantity === 1 ? <Trash2 className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
               </button>
               <span className="w-6 text-center text-sm font-medium">
                 {item.quantity}

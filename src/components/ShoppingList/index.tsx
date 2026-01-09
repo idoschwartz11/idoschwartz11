@@ -53,7 +53,8 @@ export default function ShoppingList() {
 
         {/* Empty State */}
         {!hasItems && (
-          <div className="text-center py-12">
+          <div className="text-center py-16 mt-6">
+            <div className="text-5xl mb-4">🛒</div>
             <p className="text-muted-foreground text-lg">הרשימה ריקה</p>
             <p className="text-muted-foreground/70 text-sm mt-1">
               הוסיפו פריטים להתחיל
