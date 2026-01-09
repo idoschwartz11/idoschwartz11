@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { ShoppingItem, DeletedItem } from '@/types/ShoppingItem';
-import { getEstimatedPrice } from '@/data/priceEstimates';
+import { ShoppingItem, DeletedItem, GroupedItems } from '@/types/ShoppingItem';
+import { getEstimatedPrice, getItemCategory, getAllCategories } from '@/constants/priceTable';
 
 const STORAGE_KEY = 'shopping-list-items';
 const HISTORY_KEY = 'shopping-list-history';
@@ -55,6 +55,8 @@ export function useShoppingList() {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
+    const category = getItemCategory(trimmedName);
+    
     const newItem: ShoppingItem = {
       id: generateId(),
       name: trimmedName,
@@ -62,6 +64,8 @@ export function useShoppingList() {
       isBought: false,
       orderIndex: items.filter(i => !i.isBought).length,
       priceEstimateIls: getEstimatedPrice(trimmedName),
+      categoryId: category.id,
+      categoryEmoji: category.emoji,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -118,7 +122,6 @@ export function useShoppingList() {
       const { deletedAt, ...item } = deletedItem;
       setItems(prev => {
         const newItems = [...prev, item];
-        // Sort to restore original position
         return newItems.sort((a, b) => {
           if (a.isBought !== b.isBought) return a.isBought ? 1 : -1;
           return a.orderIndex - b.orderIndex;
@@ -138,38 +141,42 @@ export function useShoppingList() {
     setItems(prev => prev.filter(item => !item.isBought));
   }, []);
 
-  // Reorder items
-  const reorderItems = useCallback((fromIndex: number, toIndex: number) => {
-    setItems(prev => {
-      const unbought = prev.filter(i => !i.isBought);
-      const bought = prev.filter(i => i.isBought);
+  // Memoized: items grouped by category
+  const groupedItems = useMemo((): GroupedItems[] => {
+    const allCategories = getAllCategories();
+    const groups: GroupedItems[] = [];
+    
+    allCategories.forEach(category => {
+      const categoryItems = items.filter(item => item.categoryId === category.id);
+      const unboughtItems = categoryItems
+        .filter(i => !i.isBought)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      const boughtItems = categoryItems
+        .filter(i => i.isBought)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
       
-      const [moved] = unbought.splice(fromIndex, 1);
-      unbought.splice(toIndex, 0, moved);
-      
-      // Update orderIndex
-      const reordered = unbought.map((item, idx) => ({
-        ...item,
-        orderIndex: idx,
-        updatedAt: Date.now(),
-      }));
-      
-      return [...reordered, ...bought];
+      if (unboughtItems.length > 0 || boughtItems.length > 0) {
+        groups.push({
+          categoryId: category.id,
+          categoryTitle: category.title,
+          categoryEmoji: category.emoji,
+          unboughtItems,
+          boughtItems,
+        });
+      }
     });
-  }, []);
+    
+    return groups;
+  }, [items]);
 
   // Memoized computed values
   const unboughtItems = useMemo(() => 
-    items
-      .filter(i => !i.isBought)
-      .sort((a, b) => b.createdAt - a.createdAt),
+    items.filter(i => !i.isBought),
     [items]
   );
 
   const boughtItems = useMemo(() => 
-    items
-      .filter(i => i.isBought)
-      .sort((a, b) => b.updatedAt - a.updatedAt),
+    items.filter(i => i.isBought),
     [items]
   );
 
@@ -185,6 +192,7 @@ export function useShoppingList() {
 
   const hasBoughtItems = boughtItems.length > 0;
   const hasItemsWithPrices = unboughtItems.some(i => i.priceEstimateIls !== null);
+  const hasItems = items.length > 0;
 
   // Get suggestions for autocomplete
   const getSuggestions = useCallback((query: string): string[] => {
@@ -202,9 +210,9 @@ export function useShoppingList() {
     const itemsList = unboughtItems
       .map(item => {
         if (item.quantity > 1) {
-          return `- ${item.name} (${item.quantity})`;
+          return `- ${item.categoryEmoji} ${item.name} (${item.quantity})`;
         }
-        return `- ${item.name}`;
+        return `- ${item.categoryEmoji} ${item.name}`;
       })
       .join('\n');
     
@@ -215,9 +223,11 @@ export function useShoppingList() {
     items,
     unboughtItems,
     boughtItems,
+    groupedItems,
     estimatedTotal,
     hasBoughtItems,
     hasItemsWithPrices,
+    hasItems,
     deletedItem,
     addItem,
     toggleBought,
@@ -226,7 +236,6 @@ export function useShoppingList() {
     undoDelete,
     dismissUndo,
     clearBoughtItems,
-    reorderItems,
     getSuggestions,
     getShareableText,
   };
