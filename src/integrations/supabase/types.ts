@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      chain_prices: {
+        Row: {
+          canonical_key: string
+          chain_name: string
+          id: string
+          last_updated: string
+          price_ils: number
+        }
+        Insert: {
+          canonical_key: string
+          chain_name: string
+          id?: string
+          last_updated?: string
+          price_ils: number
+        }
+        Update: {
+          canonical_key?: string
+          chain_name?: string
+          id?: string
+          last_updated?: string
+          price_ils?: number
+        }
+        Relationships: []
+      }
       price_cache: {
         Row: {
           avg_price_ils: number | null

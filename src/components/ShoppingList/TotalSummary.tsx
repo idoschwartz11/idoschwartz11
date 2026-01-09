@@ -1,14 +1,18 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { Info } from 'lucide-react';
+import { ShoppingItem } from '@/types/ShoppingItem';
+import { PriceComparisonCard } from './PriceComparisonCard';
 
 interface TotalSummaryProps {
   total: number;
   hasItemsWithPrices: boolean;
+  items: ShoppingItem[];
 }
 
 export const TotalSummary = memo(function TotalSummary({ 
   total, 
-  hasItemsWithPrices 
+  hasItemsWithPrices,
+  items,
 }: TotalSummaryProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [animateTotal, setAnimateTotal] = useState(false);
@@ -46,6 +50,8 @@ export const TotalSummary = memo(function TotalSummary({
           </button>
         </div>
       </div>
+
+      <PriceComparisonCard items={items} />
 
       {showInfo && (
         <>
