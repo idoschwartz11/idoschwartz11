@@ -44,7 +44,7 @@
 
     --radius: 1rem;
 
-    --header-height: 2.5rem;
+    --header-height: 4.5rem;
     --safe-area-top: env(safe-area-inset-top, 0px);
     --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -104,7 +104,7 @@
 
 @layer components {
   .ios-header {
-    @apply fixed top-0 left-0 right-0 z-50 bg-primary text-primary-foreground;
+    @apply fixed top-0 left-0 right-0 z-100 bg-primary text-primary-foreground;
     padding-top: var(--safe-area-top);
   }
 
