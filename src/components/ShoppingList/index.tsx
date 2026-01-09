@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useShoppingList } from '@/hooks/useShoppingList';
 import { Header } from './Header';
@@ -7,11 +7,12 @@ import { AddItemInput } from './AddItemInput';
 import { CategoryGroup } from './CategoryGroup';
 import { UndoToast } from './UndoToast';
 import { ShareSheet } from './ShareSheet';
-import { useState } from 'react';
+import { AISuggestions } from './AISuggestions';
 import { CleanListModeProvider, useCleanListMode } from '@/contexts/CleanListModeContext';
 
 function ShoppingListContent() {
   const {
+    items,
     groupedItems,
     estimatedTotal,
     hasBoughtItems,
@@ -37,6 +38,12 @@ function ShoppingListContent() {
     setShowShareSheet(true);
   }, []);
 
+  // Memoize current item names for AI suggestions
+  const currentItemNames = useMemo(() => 
+    items.filter(i => !i.isBought).map(i => i.name),
+    [items]
+  );
+
   // Check if there are unbought items for clean mode display
   const hasUnboughtItems = groupedItems.some(g => g.unboughtItems.length > 0);
 
@@ -50,6 +57,14 @@ function ShoppingListContent() {
           <TotalSummary 
             total={estimatedTotal} 
             hasItemsWithPrices={hasItemsWithPrices} 
+          />
+        )}
+
+        {/* AI Suggestions - hidden in clean mode */}
+        {!isCleanMode && (
+          <AISuggestions 
+            currentItems={currentItemNames} 
+            onAddItem={addItem} 
           />
         )}
 
