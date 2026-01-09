@@ -27,7 +27,7 @@ export const TotalSummary = memo(function TotalSummary({
 
   return (
     <>
-      <div className="total-card mb-4">
+      <div className="total-card mb-4 mt-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">סה״כ משוער:</span>
