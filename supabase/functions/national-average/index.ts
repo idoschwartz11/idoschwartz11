@@ -319,9 +319,43 @@ serve(async (req) => {
     const aiMatch = await matchWithAI(query, keysList);
     
     if (!aiMatch || aiMatch.confidence < 0.55) {
-      console.log('No confident AI match found');
+      console.log('No confident AI match found, trying smart price lookup...');
       
-      // Cache negative result
+      // Try smart price lookup with web scraping
+      try {
+        const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+        const smartLookupResponse = await fetch(`${SUPABASE_URL}/functions/v1/smart-price-lookup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ productName: query }),
+        });
+
+        if (smartLookupResponse.ok) {
+          const smartData = await smartLookupResponse.json();
+          
+          if (smartData.found && smartData.avgPrice) {
+            console.log('Smart lookup found price:', smartData);
+            return new Response(JSON.stringify({
+              query: query,
+              canonicalKey: smartData.canonicalName,
+              avgPriceIls: Number(smartData.avgPrice),
+              confidence: smartData.confidence || 0.7,
+              sampleCount: 1,
+              updatedAt: new Date().toISOString(),
+              cached: false,
+              source: 'web_scrape'
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+      } catch (smartError) {
+        console.error('Smart lookup failed:', smartError);
+      }
+      
+      // Cache negative result if smart lookup also failed
       await supabase.from('price_cache').upsert({
         query: normalizedQuery,
         canonical_key: null,
