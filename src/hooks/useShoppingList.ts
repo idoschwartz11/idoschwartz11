@@ -4,7 +4,7 @@ import { getItemCategory, getAllCategories } from '@/constants/priceTable';
 import { supabase } from '@/integrations/supabase/client';
 
 const HISTORY_KEY = 'shopping-list-history';
-const PRICE_CACHE_KEY = 'national-price-cache-v1';
+const PRICE_CACHE_KEY = 'national-price-cache-v2';
 const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 interface PriceCacheEntry {
