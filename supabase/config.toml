@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.national-average]
 verify_jwt = false
+
+[functions.smart-price-lookup]
+verify_jwt = false
