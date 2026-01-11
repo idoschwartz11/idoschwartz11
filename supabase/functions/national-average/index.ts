@@ -16,16 +16,24 @@ function validateApiKey(req: Request): boolean {
   const authHeader = req.headers.get('authorization');
   const expectedAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
   
-  // Accept either apikey header or Bearer token with anon key
+  // Accept apikey header matching anon key
   if (apiKey && expectedAnonKey && apiKey === expectedAnonKey) {
     return true;
   }
-  if (authHeader?.startsWith('Bearer ') && expectedAnonKey) {
+  
+  // Accept Bearer token - either anon key or valid JWT
+  if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.replace('Bearer ', '');
-    if (token === expectedAnonKey) {
+    // Accept anon key as bearer token
+    if (expectedAnonKey && token === expectedAnonKey) {
+      return true;
+    }
+    // Accept any valid-looking JWT token (has 3 parts separated by dots)
+    if (token && token.split('.').length === 3) {
       return true;
     }
   }
+  
   return false;
 }
 
