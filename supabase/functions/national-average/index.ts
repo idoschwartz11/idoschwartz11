@@ -6,6 +6,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation constants
+const MAX_QUERY_LENGTH = 200;
+const MIN_QUERY_LENGTH = 1;
+
+// Validate API key to prevent unauthorized access
+function validateApiKey(req: Request): boolean {
+  const apiKey = req.headers.get('apikey');
+  const authHeader = req.headers.get('authorization');
+  const expectedAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  
+  // Accept either apikey header or Bearer token with anon key
+  if (apiKey && expectedAnonKey && apiKey === expectedAnonKey) {
+    return true;
+  }
+  if (authHeader?.startsWith('Bearer ') && expectedAnonKey) {
+    const token = authHeader.replace('Bearer ', '');
+    if (token === expectedAnonKey) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Validate and sanitize query input
+function validateQuery(query: string | null): { valid: boolean; error?: string; sanitized?: string } {
+  if (!query || query.trim().length === 0) {
+    return { valid: false, error: 'Missing query parameter' };
+  }
+  
+  const trimmed = query.trim();
+  
+  if (trimmed.length < MIN_QUERY_LENGTH) {
+    return { valid: false, error: 'Query too short' };
+  }
+  
+  if (trimmed.length > MAX_QUERY_LENGTH) {
+    return { valid: false, error: `Query exceeds maximum length of ${MAX_QUERY_LENGTH} characters` };
+  }
+  
+  // Basic sanitization - remove control characters
+  const sanitized = trimmed.replace(/[\x00-\x1F\x7F]/g, '');
+  
+  return { valid: true, sanitized };
+}
+
 // Text normalization for Hebrew
 function normalizeText(text: string): string {
   return text
@@ -196,17 +241,32 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const query = url.searchParams.get('query');
-
-    if (!query || query.trim().length === 0) {
+    // Validate API key
+    if (!validateApiKey(req)) {
+      console.log('Unauthorized request - invalid API key');
       return new Response(JSON.stringify({ 
-        error: 'Missing query parameter' 
+        error: 'Unauthorized - valid API key required' 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const url = new URL(req.url);
+    const queryParam = url.searchParams.get('query');
+
+    // Validate input
+    const validation = validateQuery(queryParam);
+    if (!validation.valid) {
+      return new Response(JSON.stringify({ 
+        error: validation.error 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const query = validation.sanitized!;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -328,6 +388,7 @@ serve(async (req) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
           },
           body: JSON.stringify({ productName: query }),
         });
@@ -416,7 +477,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in national-average function:', error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: 'An error occurred processing your request' 
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
