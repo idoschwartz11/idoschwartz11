@@ -6,11 +6,60 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation constants
+const MAX_PRODUCT_NAME_LENGTH = 200;
+const MIN_PRODUCT_NAME_LENGTH = 1;
+
 // Israeli supermarket chain URLs for price scraping
 const CHAIN_SEARCH_URLS: Record<string, string> = {
   'שופרסל': 'shufersal.co.il',
   'רמי לוי': 'rframilevi.co.il',
 };
+
+// Validate API key to prevent unauthorized access
+function validateApiKey(req: Request): boolean {
+  const apiKey = req.headers.get('apikey');
+  const authHeader = req.headers.get('authorization');
+  const expectedAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  
+  // Accept either apikey header or Bearer token with anon key
+  if (apiKey && expectedAnonKey && apiKey === expectedAnonKey) {
+    return true;
+  }
+  if (authHeader?.startsWith('Bearer ') && expectedAnonKey) {
+    const token = authHeader.replace('Bearer ', '');
+    if (token === expectedAnonKey) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Validate and sanitize product name
+function validateProductName(productName: any): { valid: boolean; error?: string; sanitized?: string } {
+  if (!productName) {
+    return { valid: false, error: 'Missing productName parameter' };
+  }
+
+  if (typeof productName !== 'string') {
+    return { valid: false, error: 'productName must be a string' };
+  }
+
+  const trimmed = productName.trim();
+  
+  if (trimmed.length < MIN_PRODUCT_NAME_LENGTH) {
+    return { valid: false, error: 'Product name too short' };
+  }
+  
+  if (trimmed.length > MAX_PRODUCT_NAME_LENGTH) {
+    return { valid: false, error: `Product name exceeds maximum length of ${MAX_PRODUCT_NAME_LENGTH} characters` };
+  }
+  
+  // Basic sanitization - remove control characters
+  const sanitized = trimmed.replace(/[\x00-\x1F\x7F]/g, '');
+  
+  return { valid: true, sanitized };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,16 +67,34 @@ serve(async (req) => {
   }
 
   try {
-    const { productName } = await req.json();
-
-    if (!productName || productName.trim().length === 0) {
+    // Validate API key
+    if (!validateApiKey(req)) {
+      console.log('Unauthorized request - invalid API key');
       return new Response(JSON.stringify({ 
-        error: 'Missing productName parameter' 
+        error: 'Unauthorized - valid API key required',
+        found: false
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const body = await req.json();
+    const { productName: rawProductName } = body;
+
+    // Validate input
+    const validation = validateProductName(rawProductName);
+    if (!validation.valid) {
+      return new Response(JSON.stringify({ 
+        error: validation.error,
+        found: false
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const productName = validation.sanitized!;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -284,7 +351,7 @@ ${combinedContent.slice(0, 8000)}`
   } catch (error) {
     console.error('Error in smart-price-lookup:', error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'An error occurred processing your request',
       found: false
     }), {
       status: 500,
