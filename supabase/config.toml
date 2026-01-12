@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.smart-price-lookup]
 verify_jwt = false
+
+[functions.import-chain-prices]
+verify_jwt = false
