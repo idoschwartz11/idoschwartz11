@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react';
-import { X, TrendingDown, TrendingUp } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { X, TrendingDown, TrendingUp, RefreshCw, Search } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ChainPrice {
@@ -19,59 +19,115 @@ export const ChainPricePopup = memo(function ChainPricePopup({
 }: ChainPricePopupProps) {
   const [prices, setPrices] = useState<ChainPrice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingFromWeb, setIsFetchingFromWeb] = useState(false);
   const [matchedName, setMatchedName] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchChainPrices = async () => {
-      try {
-        // First, try to find the canonical_key from price_cache or price_lookup
-        let canonicalKey = itemName;
-        
-        // Check price_cache first for the mapped canonical_key
-        const { data: cacheData } = await supabase
-          .from('price_cache')
+  const fetchChainPrices = async (triggerWebScrape = false) => {
+    try {
+      setFetchError(null);
+      
+      // First, try to find the canonical_key from price_cache or price_lookup
+      let canonicalKey = itemName;
+      
+      // Check price_cache first for the mapped canonical_key
+      const { data: cacheData } = await supabase
+        .from('price_cache')
+        .select('canonical_key')
+        .ilike('query', itemName)
+        .not('canonical_key', 'is', null)
+        .limit(1)
+        .single();
+      
+      if (cacheData?.canonical_key) {
+        canonicalKey = cacheData.canonical_key;
+      } else {
+        // Try matching in price_lookup with partial match
+        const { data: lookupData } = await supabase
+          .from('price_lookup')
           .select('canonical_key')
-          .ilike('query', itemName)
-          .not('canonical_key', 'is', null)
+          .ilike('canonical_key', `%${itemName}%`)
           .limit(1)
           .single();
         
-        if (cacheData?.canonical_key) {
-          canonicalKey = cacheData.canonical_key;
-        } else {
-          // Try matching in price_lookup with partial match
-          const { data: lookupData } = await supabase
-            .from('price_lookup')
-            .select('canonical_key')
-            .ilike('canonical_key', `%${itemName}%`)
-            .limit(1)
-            .single();
-          
-          if (lookupData?.canonical_key) {
-            canonicalKey = lookupData.canonical_key;
-          }
+        if (lookupData?.canonical_key) {
+          canonicalKey = lookupData.canonical_key;
+        }
+      }
+      
+      setMatchedName(canonicalKey !== itemName ? canonicalKey : null);
+      
+      // Fetch chain prices using the resolved canonical_key
+      const { data, error } = await supabase
+        .from('chain_prices')
+        .select('chain_name, price_ils')
+        .eq('canonical_key', canonicalKey)
+        .order('price_ils', { ascending: true });
+
+      if (error) throw error;
+      
+      // If no prices found and we should trigger web scrape
+      if ((!data || data.length === 0) && triggerWebScrape) {
+        setIsFetchingFromWeb(true);
+        
+        // Call smart-price-lookup to fetch and populate prices
+        const { data: lookupResult, error: lookupError } = await supabase.functions.invoke('smart-price-lookup', {
+          body: { productName: itemName }
+        });
+        
+        if (lookupError) {
+          console.error('Error fetching from web:', lookupError);
+          setFetchError('לא הצלחנו למצוא מחירים ברשת');
+          setIsFetchingFromWeb(false);
+          return;
         }
         
-        setMatchedName(canonicalKey !== itemName ? canonicalKey : null);
+        // If prices were found and saved, refetch from chain_prices
+        if (lookupResult?.found && lookupResult?.chainPrices?.length > 0) {
+          const newCanonicalKey = lookupResult.canonicalName || itemName;
+          setMatchedName(newCanonicalKey !== itemName ? newCanonicalKey : null);
+          
+          const { data: newPrices } = await supabase
+            .from('chain_prices')
+            .select('chain_name, price_ils')
+            .eq('canonical_key', newCanonicalKey)
+            .order('price_ils', { ascending: true });
+          
+          setPrices(newPrices || []);
+        } else {
+          setFetchError('לא נמצאו מחירים עבור מוצר זה');
+        }
         
-        // Fetch chain prices using the resolved canonical_key
-        const { data, error } = await supabase
-          .from('chain_prices')
-          .select('chain_name, price_ils')
-          .eq('canonical_key', canonicalKey)
-          .order('price_ils', { ascending: true });
-
-        if (error) throw error;
+        setIsFetchingFromWeb(false);
+      } else {
         setPrices(data || []);
-      } catch (error) {
-        console.error('Error fetching chain prices:', error);
-      } finally {
+        
+        // Auto-trigger web scrape if no prices on first load
+        if ((!data || data.length === 0) && !triggerWebScrape) {
+          // Automatically try to fetch from web
+          fetchChainPrices(true);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching chain prices:', error);
+      setFetchError('שגיאה בטעינת המחירים');
+    } finally {
+      if (!isFetchingFromWeb) {
         setIsLoading(false);
       }
-    };
+    }
+  };
 
-    fetchChainPrices();
+  useEffect(() => {
+    fetchChainPrices(false);
   }, [itemName]);
+
+  const handleRetry = () => {
+    setIsLoading(true);
+    setFetchError(null);
+    fetchChainPrices(true);
+  };
 
   const minPrice = prices.length > 0 ? Math.min(...prices.map(p => p.price_ils)) : 0;
   const maxPrice = prices.length > 0 ? Math.max(...prices.map(p => p.price_ils)) : 0;
@@ -93,23 +149,46 @@ export const ChainPricePopup = memo(function ChainPricePopup({
         className="info-sheet"
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">השוואת מחירים: {itemName}</h3>
+          <div>
+            <h3 className="text-lg font-bold">השוואת מחירים: {itemName}</h3>
+            {matchedName && (
+              <p className="text-sm text-muted-foreground">מציג מחירים עבור: {matchedName}</p>
+            )}
+          </div>
           <button onClick={onClose} className="btn-icon text-muted-foreground hover:text-foreground">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        {isLoading || isFetchingFromWeb ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-3">
+            <div className="relative">
+              {isFetchingFromWeb ? (
+                <Search className="w-8 h-8 text-primary animate-pulse" />
+              ) : (
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              )}
+            </div>
+            <p className="text-muted-foreground text-sm">
+              {isFetchingFromWeb ? 'מחפש מחירים ברשתות...' : 'טוען מחירים...'}
+            </p>
           </div>
         ) : prices.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">
-            אין מידע על מחירים ברשתות שונות עבור מוצר זה
-          </p>
+          <div className="flex flex-col items-center justify-center py-8 gap-4">
+            <p className="text-muted-foreground text-center">
+              {fetchError || 'אין מידע על מחירים ברשתות שונות עבור מוצר זה'}
+            </p>
+            <button 
+              onClick={handleRetry}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              נסה לחפש שוב
+            </button>
+          </div>
         ) : (
           <div className="space-y-2">
-            {prices.map((price, index) => {
+            {prices.map((price) => {
               const isLowest = price.price_ils === minPrice;
               const isHighest = price.price_ils === maxPrice;
               const savings = maxPrice - price.price_ils;
