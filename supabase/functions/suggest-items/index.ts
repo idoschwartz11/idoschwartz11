@@ -5,120 +5,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Input validation constants
-const MAX_ARRAY_LENGTH = 100;
-const MAX_ITEM_LENGTH = 100;
-
-// Validate API key to prevent unauthorized access
-function validateApiKey(req: Request): boolean {
-  const apiKey = req.headers.get('apikey');
-  const authHeader = req.headers.get('authorization');
-  const expectedAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  
-  // Accept either apikey header or Bearer token with anon key
-  if (apiKey && expectedAnonKey && apiKey === expectedAnonKey) {
-    return true;
-  }
-  if (authHeader?.startsWith('Bearer ') && expectedAnonKey) {
-    const token = authHeader.replace('Bearer ', '');
-    if (token === expectedAnonKey) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Validate and sanitize arrays
-function validateArrayInput(arr: any, fieldName: string): { valid: boolean; error?: string; sanitized?: string[] } {
-  // Allow missing/null arrays
-  if (arr === null || arr === undefined) {
-    return { valid: true, sanitized: [] };
-  }
-
-  if (!Array.isArray(arr)) {
-    return { valid: false, error: `${fieldName} must be an array` };
-  }
-
-  if (arr.length > MAX_ARRAY_LENGTH) {
-    return { valid: false, error: `${fieldName} exceeds maximum length of ${MAX_ARRAY_LENGTH}` };
-  }
-
-  const sanitized: string[] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const item = arr[i];
-    if (typeof item !== 'string') {
-      continue; // Skip non-string items
-    }
-    
-    const trimmed = item.trim();
-    if (trimmed.length === 0) {
-      continue; // Skip empty strings
-    }
-    
-    if (trimmed.length > MAX_ITEM_LENGTH) {
-      return { valid: false, error: `Item in ${fieldName} exceeds maximum length of ${MAX_ITEM_LENGTH}` };
-    }
-    
-    // Basic sanitization - remove control characters
-    const clean = trimmed.replace(/[\x00-\x1F\x7F]/g, '');
-    sanitized.push(clean);
-  }
-
-  return { valid: true, sanitized };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Validate API key
-    if (!validateApiKey(req)) {
-      console.log('Unauthorized request - invalid API key');
-      return new Response(JSON.stringify({ 
-        error: 'Unauthorized - valid API key required' 
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const body = await req.json();
-    const { currentItems, history } = body;
-    
-    // Validate inputs
-    const currentItemsValidation = validateArrayInput(currentItems, 'currentItems');
-    if (!currentItemsValidation.valid) {
-      return new Response(JSON.stringify({ error: currentItemsValidation.error }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const historyValidation = validateArrayInput(history, 'history');
-    if (!historyValidation.valid) {
-      return new Response(JSON.stringify({ error: historyValidation.error }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const validCurrentItems = currentItemsValidation.sanitized!;
-    const validHistory = historyValidation.sanitized!;
-
+    const { currentItems, history } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const currentItemsList = validCurrentItems.length > 0 
-      ? validCurrentItems.join(", ") 
+    const currentItemsList = currentItems?.length > 0 
+      ? currentItems.join(", ") 
       : "אין פריטים ברשימה";
     
-    const historyList = validHistory.length > 0 
-      ? validHistory.slice(0, 30).join(", ") 
+    const historyList = history?.length > 0 
+      ? history.slice(0, 30).join(", ") 
       : "אין היסטוריה";
 
     const systemPrompt = `אתה עוזר קניות חכם. על בסיס רשימת הקניות הנוכחית והיסטוריית הקניות של המשתמש, הצע 3-5 פריטים שכנראה שכחו להוסיף.
@@ -212,7 +117,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("suggest-items error:", error);
-    return new Response(JSON.stringify({ error: "An error occurred processing your request" }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

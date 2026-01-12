@@ -5,96 +5,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Input validation constants
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB max
-const VALID_IMAGE_PREFIXES = ['data:image/jpeg', 'data:image/png', 'data:image/gif', 'data:image/webp'];
-
-// Validate API key to prevent unauthorized access
-function validateApiKey(req: Request): boolean {
-  const apiKey = req.headers.get('apikey');
-  const authHeader = req.headers.get('authorization');
-  const expectedAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  
-  // Accept either apikey header or Bearer token with anon key
-  if (apiKey && expectedAnonKey && apiKey === expectedAnonKey) {
-    return true;
-  }
-  if (authHeader?.startsWith('Bearer ') && expectedAnonKey) {
-    const token = authHeader.replace('Bearer ', '');
-    if (token === expectedAnonKey) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Validate image input
-function validateImageInput(imageBase64: any): { valid: boolean; error?: string } {
-  if (!imageBase64) {
-    return { valid: false, error: 'No image provided' };
-  }
-
-  if (typeof imageBase64 !== 'string') {
-    return { valid: false, error: 'Image must be a string' };
-  }
-
-  // Check size (base64 is ~33% larger than original)
-  const estimatedSizeBytes = (imageBase64.length * 3) / 4;
-  if (estimatedSizeBytes > MAX_IMAGE_SIZE_BYTES) {
-    return { valid: false, error: `Image exceeds maximum size of ${MAX_IMAGE_SIZE_BYTES / (1024 * 1024)}MB` };
-  }
-
-  // Check format - must be data URL or raw base64
-  if (imageBase64.startsWith('data:')) {
-    const isValidPrefix = VALID_IMAGE_PREFIXES.some(prefix => imageBase64.startsWith(prefix));
-    if (!isValidPrefix) {
-      return { valid: false, error: 'Invalid image format. Supported: JPEG, PNG, GIF, WebP' };
-    }
-  } else {
-    // Raw base64 - basic validation that it looks like base64
-    const base64Regex = /^[A-Za-z0-9+/]+=*$/;
-    // Check first 100 chars to avoid regex on huge strings
-    if (!base64Regex.test(imageBase64.slice(0, 100).replace(/\s/g, ''))) {
-      return { valid: false, error: 'Invalid base64 encoding' };
-    }
-  }
-
-  return { valid: true };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Validate API key
-    if (!validateApiKey(req)) {
-      console.log('Unauthorized request - invalid API key');
-      return new Response(JSON.stringify({ 
-        error: 'Unauthorized - valid API key required' 
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const body = await req.json();
-    const { imageBase64 } = body;
-    
-    // Validate input
-    const validation = validateImageInput(imageBase64);
-    if (!validation.valid) {
-      return new Response(JSON.stringify({ error: validation.error }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    const { imageBase64 } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
+    }
+
+    if (!imageBase64) {
+      throw new Error("No image provided");
     }
 
     console.log("Processing image for item detection...");
@@ -203,7 +128,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("scan-image error:", error);
-    return new Response(JSON.stringify({ error: "An error occurred processing your request" }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
