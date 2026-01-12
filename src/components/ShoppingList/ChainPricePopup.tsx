@@ -19,14 +19,46 @@ export const ChainPricePopup = memo(function ChainPricePopup({
 }: ChainPricePopupProps) {
   const [prices, setPrices] = useState<ChainPrice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [matchedName, setMatchedName] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchChainPrices = async () => {
       try {
+        // First, try to find the canonical_key from price_cache or price_lookup
+        let canonicalKey = itemName;
+        
+        // Check price_cache first for the mapped canonical_key
+        const { data: cacheData } = await supabase
+          .from('price_cache')
+          .select('canonical_key')
+          .ilike('query', itemName)
+          .not('canonical_key', 'is', null)
+          .limit(1)
+          .single();
+        
+        if (cacheData?.canonical_key) {
+          canonicalKey = cacheData.canonical_key;
+        } else {
+          // Try matching in price_lookup with partial match
+          const { data: lookupData } = await supabase
+            .from('price_lookup')
+            .select('canonical_key')
+            .ilike('canonical_key', `%${itemName}%`)
+            .limit(1)
+            .single();
+          
+          if (lookupData?.canonical_key) {
+            canonicalKey = lookupData.canonical_key;
+          }
+        }
+        
+        setMatchedName(canonicalKey !== itemName ? canonicalKey : null);
+        
+        // Fetch chain prices using the resolved canonical_key
         const { data, error } = await supabase
           .from('chain_prices')
           .select('chain_name, price_ils')
-          .eq('canonical_key', itemName)
+          .eq('canonical_key', canonicalKey)
           .order('price_ils', { ascending: true });
 
         if (error) throw error;
