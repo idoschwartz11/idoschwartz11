@@ -30,7 +30,10 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
   const [priceData, setPriceData] = useState<ChainPriceData>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const chainNames = chainTotals.map(c => c.chainName);
+  
+
+  // Get all unique chain names from database to show all columns
+  const [allChainNames, setAllChainNames] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchAllPrices = async () => {
@@ -45,6 +48,7 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
         if (error) throw error;
 
         const priceMap: ChainPriceData = {};
+        const chainSet = new Set<string>();
         
         if (data) {
           data.forEach(price => {
@@ -52,10 +56,22 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
               priceMap[price.canonical_key] = {};
             }
             priceMap[price.canonical_key][price.chain_name] = price.price_ils;
+            chainSet.add(price.chain_name);
           });
         }
 
         setPriceData(priceMap);
+        // Use chains from actual data, sorted by total from chainTotals
+        const sortedChains = chainTotals
+          .map(c => c.chainName)
+          .filter(name => chainSet.has(name));
+        // Add any chains from data that aren't in chainTotals
+        chainSet.forEach(chain => {
+          if (!sortedChains.includes(chain)) {
+            sortedChains.push(chain);
+          }
+        });
+        setAllChainNames(sortedChains);
       } catch (error) {
         console.error('Error fetching prices:', error);
       } finally {
@@ -64,7 +80,7 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
     };
 
     fetchAllPrices();
-  }, [items]);
+  }, [items, chainTotals]);
 
   const getCheapestChainForItem = (itemName: string): string | null => {
     const prices = priceData[itemName];
@@ -145,7 +161,7 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-right py-2 px-2 font-semibold">מוצר</th>
-                    {chainNames.map(chain => (
+                    {allChainNames.map(chain => (
                       <th key={chain} className="text-center py-2 px-2 font-semibold whitespace-nowrap">
                         {chain}
                       </th>
@@ -167,7 +183,7 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
                             )}
                           </div>
                         </td>
-                        {chainNames.map(chain => {
+                        {allChainNames.map(chain => {
                           const price = priceData[item.name]?.[chain];
                           const isCheapest = chain === cheapestChain;
                           
