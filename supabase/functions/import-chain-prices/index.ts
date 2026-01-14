@@ -2,180 +2,232 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Normalize product name to canonical key (עדין יותר)
+// Normalize product name to canonical key
 function normalizeProductName(name: string): string {
   return name
-    .replace(/[()[\]{}]/g, " ")
-    .replace(/\s*[xX×]\s*\d+/g, "") // Remove multipliers like x6
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\d+\s*(גרם|מ"ל|ליטר|ק"ג|יח'|מל|גר|ג)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
-// Safer XML parsing using DOMParser
+// Simple regex-based XML parser for Item elements
 function parseXmlItems(xmlString: string): Array<{ name: string; price: number; code?: string }> {
-  // BOM clean (נפוץ בקבצים האלה)
-  const cleaned = xmlString.replace(/^\uFEFF/, "");
-
-  const doc = new DOMParser().parseFromString(cleaned, "application/xml");
-  if (!doc) return [];
-
-  // אם יש שגיאת XML – מחזיר parsererror
-  const parserErr = doc.querySelector("parsererror");
-  if (parserErr) return [];
-
   const items: Array<{ name: string; price: number; code?: string }> = [];
-
-  // תופס גם Item וגם Product
-  const nodes = Array.from(doc.querySelectorAll("Item, Product"));
-
-  for (const node of nodes) {
-    const name =
-      node.querySelector("ItemName")?.textContent?.trim() ||
-      node.querySelector("ProductName")?.textContent?.trim() ||
-      node.querySelector("ItemNm")?.textContent?.trim() ||
-      "";
-
-    const priceStr =
-      node.querySelector("ItemPrice")?.textContent?.trim() ||
-      node.querySelector("ProductPrice")?.textContent?.trim() ||
-      node.querySelector("Price")?.textContent?.trim() ||
-      "";
-
-    const code =
-      node.querySelector("ItemCode")?.textContent?.trim() ||
-      node.querySelector("ProductCode")?.textContent?.trim() ||
-      node.querySelector("Barcode")?.textContent?.trim();
-
-    const price = Number(priceStr);
-
-    if (name && Number.isFinite(price) && price > 0) {
-      items.push({ name, price, code: code || undefined });
+  
+  // Remove BOM and clean up
+  const cleaned = xmlString.replace(/^\uFEFF/, '').trim();
+  
+  // Match Item or Product elements
+  const itemRegex = /<(?:Item|Product)[^>]*>([\s\S]*?)<\/(?:Item|Product)>/gi;
+  let match;
+  
+  while ((match = itemRegex.exec(cleaned)) !== null) {
+    const itemContent = match[1];
+    
+    // Extract name
+    const nameMatch = itemContent.match(/<(?:ItemName|ProductName|ItemNm)>([^<]*)<\/(?:ItemName|ProductName|ItemNm)>/i);
+    const name = nameMatch?.[1]?.trim();
+    
+    // Extract price
+    const priceMatch = itemContent.match(/<(?:ItemPrice|ProductPrice|Price)>([^<]*)<\/(?:ItemPrice|ProductPrice|Price)>/i);
+    const priceStr = priceMatch?.[1]?.trim();
+    const price = priceStr ? parseFloat(priceStr) : NaN;
+    
+    // Extract code
+    const codeMatch = itemContent.match(/<(?:ItemCode|ProductCode|Barcode)>([^<]*)<\/(?:ItemCode|ProductCode|Barcode)>/i);
+    const code = codeMatch?.[1]?.trim();
+    
+    if (name && !isNaN(price) && price > 0) {
+      items.push({ name, price, code });
     }
   }
-
+  
   return items;
 }
 
-// Decompress gzip data
+// Decompress gzip data using DecompressionStream
 async function decompressGzip(compressedData: Uint8Array): Promise<string> {
-  const ds = new DecompressionStream("gzip");
-  const blob = new Blob([compressedData]);
-  const decompressedStream = blob.stream().pipeThrough(ds);
-  return await new Response(decompressedStream).text();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(compressedData);
+      controller.close();
+    }
+  });
+  
+  const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
+  const reader = decompressedStream.getReader();
+  const chunks: Uint8Array[] = [];
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  
+  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  
+  return new TextDecoder('utf-8').decode(result);
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { chainName, fileUrl } = await req.json();
-
+    
     if (!chainName || !fileUrl) {
-      return new Response(JSON.stringify({ error: "חסרים שם רשת או URL לקובץ" }), {
+      return new Response(JSON.stringify({ 
+        error: 'Missing chainName or fileUrl' 
+      }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    console.log(`Starting import for ${chainName} from ${fileUrl}`);
 
-    // 1) Download
+    // Download the file
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
     }
-    const raw = new Uint8Array(await response.arrayBuffer());
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const compressedData = new Uint8Array(arrayBuffer);
+    
+    console.log(`Downloaded ${compressedData.length} bytes`);
 
-    // 2) Decompress (אם לא gz – ננסה טקסט רגיל)
+    // Try to decompress, fall back to plain text
     let xmlString: string;
     try {
-      xmlString = await decompressGzip(raw);
+      xmlString = await decompressGzip(compressedData);
+      console.log('Successfully decompressed gzip data');
     } catch {
-      xmlString = new TextDecoder().decode(raw);
+      console.log('Not gzip, treating as plain text');
+      xmlString = new TextDecoder('utf-8').decode(compressedData);
     }
 
-    // 3) Parse XML
+    // Parse XML items
     const items = parseXmlItems(xmlString);
+    console.log(`Parsed ${items.length} items from XML`);
+
     if (items.length === 0) {
-      return new Response(JSON.stringify({ success: false, error: "לא נמצאו מוצרים בקובץ או שה־XML לא תקין." }), {
+      return new Response(JSON.stringify({ 
+        error: 'No valid items found in file',
+        sample: xmlString.substring(0, 500)
+      }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // 4) Group -> avg per canonical key (מומלץ לשקול להשתמש בקוד/ברקוד במקום name בלבד)
-    const byKey = new Map<string, { sum: number; count: number }>();
+    // Create Supabase client with service role
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
 
+    // Group by canonical key and calculate average
+    const priceMap = new Map<string, { prices: number[]; name: string }>();
+    
     for (const item of items) {
       const key = normalizeProductName(item.name);
-      if (key.length < 2) continue;
-
-      const curr = byKey.get(key) ?? { sum: 0, count: 0 };
-      curr.sum += item.price;
-      curr.count += 1;
-      byKey.set(key, curr);
+      if (!priceMap.has(key)) {
+        priceMap.set(key, { prices: [], name: item.name });
+      }
+      priceMap.get(key)!.prices.push(item.price);
     }
 
-    const now = new Date().toISOString();
-    const entries = Array.from(byKey.entries());
+    // Prepare chain_prices records
+    const chainPrices = Array.from(priceMap.entries()).map(([key, data]) => ({
+      canonical_key: key,
+      chain_name: chainName,
+      price_ils: data.prices.reduce((a, b) => a + b, 0) / data.prices.length,
+      last_updated: new Date().toISOString()
+    }));
 
-    // 5) Upsert chain_prices בבאצ'ים
-    const batchSize = 500;
+    // Upsert in batches
+    const batchSize = 100;
     let processed = 0;
-    let errors = 0;
+    let errors: string[] = [];
 
-    for (let i = 0; i < entries.length; i += batchSize) {
-      const batch = entries.slice(i, i + batchSize);
-
-      const rows = batch.map(([canonical_key, v]) => ({
-        canonical_key,
-        chain_name: chainName,
-        price_ils: v.sum / v.count,
-        last_updated: now,
-      }));
-
-      const { error } = await supabase.from("chain_prices").upsert(rows, { onConflict: "canonical_key,chain_name" });
-
+    for (let i = 0; i < chainPrices.length; i += batchSize) {
+      const batch = chainPrices.slice(i, i + batchSize);
+      const { error } = await supabase.from('chain_prices')
+        .upsert(batch, { onConflict: 'canonical_key,chain_name' });
+      
       if (error) {
-        errors++;
+        errors.push(`Batch ${i}: ${error.message}`);
       } else {
         processed += batch.length;
       }
     }
 
-    // 6) עדכון price_lookup ב־DB (RPC מומלץ)
-    // צור פונקציה ב־SQL פעם אחת (מצורף למטה) ואז:
-    const canonicalKeys = entries.map(([k]) => k);
+    // Update price_lookup with averages
+    const canonicalKeys = Array.from(priceMap.keys());
+    
+    // Fetch all chain prices for these keys
+    const { data: allPrices } = await supabase
+      .from('chain_prices')
+      .select('canonical_key, price_ils')
+      .in('canonical_key', canonicalKeys);
 
-    for (let i = 0; i < canonicalKeys.length; i += batchSize) {
-      const keysBatch = canonicalKeys.slice(i, i + batchSize);
-      const { error } = await supabase.rpc("refresh_price_lookup_for_keys", { keys: keysBatch });
-      if (error) errors++;
+    if (allPrices) {
+      const avgMap = new Map<string, number[]>();
+      for (const p of allPrices) {
+        if (!avgMap.has(p.canonical_key)) {
+          avgMap.set(p.canonical_key, []);
+        }
+        avgMap.get(p.canonical_key)!.push(p.price_ils);
+      }
+
+      const lookupRecords = Array.from(avgMap.entries()).map(([key, prices]) => ({
+        canonical_key: key,
+        avg_price_ils: prices.reduce((a, b) => a + b, 0) / prices.length,
+        sample_count: prices.length,
+        updated_at: new Date().toISOString()
+      }));
+
+      for (let i = 0; i < lookupRecords.length; i += batchSize) {
+        const batch = lookupRecords.slice(i, i + batchSize);
+        await supabase.from('price_lookup')
+          .upsert(batch, { onConflict: 'canonical_key' });
+      }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        chainName,
-        itemsParsed: items.length,
-        uniqueProducts: byKey.size,
-        itemsProcessed: processed,
-        batchErrors: errors,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    console.log(`Import complete: ${processed} unique products for ${chainName}`);
+
+    return new Response(JSON.stringify({
+      success: true,
+      chainName,
+      itemsProcessed: items.length,
+      uniqueProducts: chainPrices.length,
+      batchErrors: errors.length > 0 ? errors : undefined
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ success: false, error: msg }), {
+    console.error('Import error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ 
+      error: message 
+    }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });

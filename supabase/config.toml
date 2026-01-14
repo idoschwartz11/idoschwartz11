@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.import-chain-prices]
 verify_jwt = false
+
+[functions.import-external-supabase]
+verify_jwt = false
