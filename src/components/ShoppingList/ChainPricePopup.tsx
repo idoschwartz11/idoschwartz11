@@ -29,29 +29,73 @@ export const ChainPricePopup = memo(function ChainPricePopup({
       
       // First, try to find the canonical_key from price_cache or price_lookup
       let canonicalKey = itemName;
+      let foundMatch = false;
       
-      // Check price_cache first for the mapped canonical_key
+      // Check price_cache first for EXACT query match
       const { data: cacheData } = await supabase
         .from('price_cache')
         .select('canonical_key')
-        .ilike('query', itemName)
+        .eq('query', itemName)
         .not('canonical_key', 'is', null)
         .limit(1)
         .single();
       
       if (cacheData?.canonical_key) {
         canonicalKey = cacheData.canonical_key;
-      } else {
-        // Try matching in price_lookup with partial match
-        const { data: lookupData } = await supabase
-          .from('price_lookup')
+        foundMatch = true;
+      }
+      
+      // If no exact cache match, try exact match in chain_prices first
+      if (!foundMatch) {
+        const { data: exactChainMatch } = await supabase
+          .from('chain_prices')
           .select('canonical_key')
-          .ilike('canonical_key', `%${itemName}%`)
+          .eq('canonical_key', itemName)
           .limit(1)
           .single();
         
-        if (lookupData?.canonical_key) {
-          canonicalKey = lookupData.canonical_key;
+        if (exactChainMatch?.canonical_key) {
+          canonicalKey = exactChainMatch.canonical_key;
+          foundMatch = true;
+        }
+      }
+      
+      // If still no match, try exact match in price_lookup
+      if (!foundMatch) {
+        const { data: exactLookup } = await supabase
+          .from('price_lookup')
+          .select('canonical_key')
+          .eq('canonical_key', itemName)
+          .limit(1)
+          .single();
+        
+        if (exactLookup?.canonical_key) {
+          canonicalKey = exactLookup.canonical_key;
+          foundMatch = true;
+        }
+      }
+      
+      // Only if no exact match, try partial match with ALL words from itemName
+      if (!foundMatch) {
+        const words = itemName.split(/\s+/).filter(w => w.length > 1);
+        
+        if (words.length > 0) {
+          // Build a query that requires ALL words to be present
+          let query = supabase
+            .from('chain_prices')
+            .select('canonical_key');
+          
+          // Add ilike condition for each word
+          words.forEach(word => {
+            query = query.ilike('canonical_key', `%${word}%`);
+          });
+          
+          const { data: partialMatch } = await query.limit(1).single();
+          
+          if (partialMatch?.canonical_key) {
+            canonicalKey = partialMatch.canonical_key;
+            foundMatch = true;
+          }
         }
       }
       
