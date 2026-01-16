@@ -1,20 +1,8 @@
 import { memo, useState, useEffect } from 'react';
 import { X, Check, Minus } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { supabase } from '@/integrations/supabase/client';
 import { ShoppingItem } from '@/types/ShoppingItem';
-
-interface ChainTotal {
-  chainName: string;
-  total: number;
-  itemsMatched: number;
-}
-
-interface ChainPriceData {
-  [itemName: string]: {
-    [chainName: string]: number;
-  };
-}
+import { buildPriceMatrix, ChainTotal } from '@/lib/priceUtils';
 
 interface PriceComparisonSheetProps {
   items: ShoppingItem[];
@@ -24,54 +12,23 @@ interface PriceComparisonSheetProps {
 
 export const PriceComparisonSheet = memo(function PriceComparisonSheet({
   items,
-  chainTotals,
+  chainTotals: initialChainTotals,
   onClose,
 }: PriceComparisonSheetProps) {
-  const [priceData, setPriceData] = useState<ChainPriceData>({});
+  const [priceData, setPriceData] = useState<{ [key: string]: { [chain: string]: number } }>({});
   const [isLoading, setIsLoading] = useState(true);
-
-  
-
-  // Get all unique chain names from database to show all columns
   const [allChainNames, setAllChainNames] = useState<string[]>([]);
+  const [chainTotals, setChainTotals] = useState<ChainTotal[]>(initialChainTotals);
 
   useEffect(() => {
-    const fetchAllPrices = async () => {
+    const fetchPrices = async () => {
       try {
-        const itemNames = items.map(item => item.name);
+        // Use the unified price utility with canonical_key
+        const result = await buildPriceMatrix(items);
         
-        const { data, error } = await supabase
-          .from('chain_prices')
-          .select('canonical_key, chain_name, price_ils')
-          .in('canonical_key', itemNames);
-
-        if (error) throw error;
-
-        const priceMap: ChainPriceData = {};
-        const chainSet = new Set<string>();
-        
-        if (data) {
-          data.forEach(price => {
-            if (!priceMap[price.canonical_key]) {
-              priceMap[price.canonical_key] = {};
-            }
-            priceMap[price.canonical_key][price.chain_name] = price.price_ils;
-            chainSet.add(price.chain_name);
-          });
-        }
-
-        setPriceData(priceMap);
-        // Use chains from actual data, sorted by total from chainTotals
-        const sortedChains = chainTotals
-          .map(c => c.chainName)
-          .filter(name => chainSet.has(name));
-        // Add any chains from data that aren't in chainTotals
-        chainSet.forEach(chain => {
-          if (!sortedChains.includes(chain)) {
-            sortedChains.push(chain);
-          }
-        });
-        setAllChainNames(sortedChains);
+        setPriceData(result.priceData);
+        setAllChainNames(result.allChainNames);
+        setChainTotals(result.chainTotals);
       } catch (error) {
         console.error('Error fetching prices:', error);
       } finally {
@@ -79,11 +36,11 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
       }
     };
 
-    fetchAllPrices();
-  }, [items, chainTotals]);
+    fetchPrices();
+  }, [items]);
 
-  const getCheapestChainForItem = (itemName: string): string | null => {
-    const prices = priceData[itemName];
+  const getCheapestChainForItem = (canonicalKey: string): string | null => {
+    const prices = priceData[canonicalKey];
     if (!prices) return null;
     
     let cheapest: string | null = null;
@@ -169,14 +126,16 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map(item => {
-                    const cheapestChain = getCheapestChainForItem(item.name);
+                  {items.filter(i => !i.isBought).map(item => {
+                    // Use canonical_key for price lookup
+                    const cheapestChain = getCheapestChainForItem(item.canonical_key.trim());
                     
                     return (
                       <tr key={item.id} className="border-b border-border/50">
                         <td className="py-2 px-2">
                           <div className="flex items-center gap-1">
                             <span>{item.categoryEmoji}</span>
+                            {/* Display item.name (user text), but use canonical_key for prices */}
                             <span className="truncate max-w-[100px]">{item.name}</span>
                             {item.quantity > 1 && (
                               <span className="text-xs text-muted-foreground">×{item.quantity}</span>
@@ -184,7 +143,8 @@ export const PriceComparisonSheet = memo(function PriceComparisonSheet({
                           </div>
                         </td>
                         {allChainNames.map(chain => {
-                          const price = priceData[item.name]?.[chain];
+                          // Use canonical_key for price lookup
+                          const price = priceData[item.canonical_key.trim()]?.[chain];
                           const isCheapest = chain === cheapestChain;
                           
                           return (
