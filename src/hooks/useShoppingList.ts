@@ -168,7 +168,8 @@ export function useShoppingList() {
 
         if (error) throw error;
 
-        const mappedItems: ShoppingItem[] = (data || []).map(item => {
+        // First, map items with default canonical_key = name
+        const initialItems: ShoppingItem[] = (data || []).map(item => {
           const category = getItemCategory(item.name);
           const normalized = normalizeQuery(item.name);
           const cached = priceCacheRef.current.get(normalized);
@@ -178,7 +179,7 @@ export function useShoppingList() {
             name: item.name,
             userText: item.name,
             resolvedCanonicalKey: null,
-            canonical_key: item.name,
+            canonical_key: item.name, // Will be resolved below
             resolveConfidence: 0,
             resolveSource: 'prior',
             quantity: item.quantity,
@@ -192,10 +193,54 @@ export function useShoppingList() {
           };
         });
 
-        setItems(mappedItems);
+        setItems(initialItems);
         
-        // Fetch missing prices in background
-        setTimeout(() => fetchMissingPrices(mappedItems), 100);
+        // Resolve canonical_keys for all items in parallel
+        const resolvePromises = initialItems.map(async (item) => {
+          const result = await supabase.rpc('resolve_query', { q: item.name });
+          if (result.error) {
+            return { id: item.id, canonical_key: item.name, resolved: null, confidence: 0, source: 'rpc_error' };
+          }
+          const parsed = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+          return {
+            id: item.id,
+            canonical_key: parsed?.resolved ?? item.name,
+            resolved: parsed?.resolved,
+            confidence: parsed?.confidence ?? 0,
+            source: parsed?.source ?? 'fallback'
+          };
+        });
+        
+        const resolved = await Promise.all(resolvePromises);
+        
+        // Update items with resolved canonical_keys
+        setItems(prev => prev.map(item => {
+          const resolvedItem = resolved.find(r => r.id === item.id);
+          if (resolvedItem) {
+            return {
+              ...item,
+              canonical_key: resolvedItem.canonical_key,
+              resolvedCanonicalKey: resolvedItem.resolved,
+              resolveConfidence: resolvedItem.confidence,
+              resolveSource: resolvedItem.source,
+            };
+          }
+          return item;
+        }));
+        
+        // Debug log
+        console.log('[useShoppingList] Resolved items:', resolved.map(r => ({ 
+          id: r.id, 
+          canonical_key: r.canonical_key, 
+          source: r.source 
+        })));
+        
+        // Fetch missing prices using resolved canonical_keys
+        const updatedItems = initialItems.map(item => {
+          const resolvedItem = resolved.find(r => r.id === item.id);
+          return resolvedItem ? { ...item, canonical_key: resolvedItem.canonical_key } : item;
+        });
+        setTimeout(() => fetchMissingPrices(updatedItems), 100);
       } catch (error) {
         console.error('Error fetching items:', error);
       } finally {
@@ -245,12 +290,29 @@ export function useShoppingList() {
               return [mappedItem, ...prev];
             });
             
-            // Fetch price for new item
+            // Fetch price for new item using canonical_key (for realtime, we need to resolve it)
             if (!cached) {
-              fetchPrice(newItem.name).then(price => {
-                if (price !== null) {
-                  updateItemPrice(newItem.id, price);
-                }
+              // For realtime events, resolve the canonical_key first
+              resolveQuery(newItem.name).then(result => {
+                const canonicalKeyToUse = result.resolved ?? newItem.name;
+                // Update the item's canonical_key in state
+                setItems(prev => prev.map(item => 
+                  item.id === newItem.id 
+                    ? { 
+                        ...item, 
+                        canonical_key: canonicalKeyToUse,
+                        resolvedCanonicalKey: result.resolved,
+                        resolveConfidence: result.confidence,
+                        resolveSource: result.source,
+                      } 
+                    : item
+                ));
+                // Then fetch price using canonical_key
+                fetchPrice(canonicalKeyToUse).then(price => {
+                  if (price !== null) {
+                    updateItemPrice(newItem.id, price);
+                  }
+                });
               });
             }
           } else if (payload.eventType === 'UPDATE') {

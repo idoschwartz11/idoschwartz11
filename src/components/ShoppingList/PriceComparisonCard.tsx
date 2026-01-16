@@ -1,15 +1,9 @@
 import { memo, useState, useEffect, useMemo } from 'react';
 import { Store, ChevronDown, TrendingDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/integrations/supabase/client';
 import { ShoppingItem } from '@/types/ShoppingItem';
 import { PriceComparisonSheet } from './PriceComparisonSheet';
-
-interface ChainTotal {
-  chainName: string;
-  total: number;
-  itemsMatched: number;
-}
+import { calculateChainTotals, ChainTotal } from '@/lib/priceUtils';
 
 interface PriceComparisonCardProps {
   items: ShoppingItem[];
@@ -36,38 +30,8 @@ export const PriceComparisonCard = memo(function PriceComparisonCard({
       }
 
       try {
-        const itemNames = unboughtItems.map(item => item.name);
-        
-        const { data, error } = await supabase
-          .from('chain_prices')
-          .select('canonical_key, chain_name, price_ils')
-          .in('canonical_key', itemNames);
-
-        if (error) throw error;
-
-        // Group by chain and calculate totals
-        const chainMap = new Map<string, { total: number; itemsMatched: number }>();
-
-        if (data) {
-          data.forEach(price => {
-            const item = unboughtItems.find(i => i.name === price.canonical_key);
-            if (item) {
-              const existing = chainMap.get(price.chain_name) || { total: 0, itemsMatched: 0 };
-              chainMap.set(price.chain_name, {
-                total: existing.total + (price.price_ils * item.quantity),
-                itemsMatched: existing.itemsMatched + 1,
-              });
-            }
-          });
-        }
-
-        const totals: ChainTotal[] = Array.from(chainMap.entries())
-          .map(([chainName, data]) => ({
-            chainName,
-            ...data,
-          }))
-          .sort((a, b) => a.total - b.total);
-
+        // Use the unified price utility with canonical_key
+        const totals = await calculateChainTotals(unboughtItems);
         setChainTotals(totals);
       } catch (error) {
         console.error('Error fetching chain prices:', error);

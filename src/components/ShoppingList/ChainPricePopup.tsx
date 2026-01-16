@@ -10,11 +10,13 @@ interface ChainPrice {
 
 interface ChainPricePopupProps {
   itemName: string;
+  canonicalKey: string;
   onClose: () => void;
 }
 
 export const ChainPricePopup = memo(function ChainPricePopup({
   itemName,
+  canonicalKey,
   onClose,
 }: ChainPricePopupProps) {
   const [prices, setPrices] = useState<ChainPrice[]>([]);
@@ -27,88 +29,27 @@ export const ChainPricePopup = memo(function ChainPricePopup({
     try {
       setFetchError(null);
       
-      // First, try to find the canonical_key from price_cache or price_lookup
-      let canonicalKey = itemName;
-      let foundMatch = false;
+      // IMPORTANT: Use canonical_key directly for price lookup
+      // This ensures consistency with the shopping list and comparison views
+      const lookupKey = canonicalKey.trim();
       
-      // Check price_cache first for EXACT query match
-      const { data: cacheData } = await supabase
-        .from('price_cache')
-        .select('canonical_key')
-        .eq('query', itemName)
-        .not('canonical_key', 'is', null)
-        .limit(1)
-        .single();
+      console.log('[ChainPricePopup] Fetching prices for canonical_key:', lookupKey);
       
-      if (cacheData?.canonical_key) {
-        canonicalKey = cacheData.canonical_key;
-        foundMatch = true;
+      // Show matched name if it differs from user input
+      if (lookupKey !== itemName) {
+        setMatchedName(lookupKey);
       }
       
-      // If no exact cache match, try exact match in chain_prices first
-      if (!foundMatch) {
-        const { data: exactChainMatch } = await supabase
-          .from('chain_prices')
-          .select('canonical_key')
-          .eq('canonical_key', itemName)
-          .limit(1)
-          .single();
-        
-        if (exactChainMatch?.canonical_key) {
-          canonicalKey = exactChainMatch.canonical_key;
-          foundMatch = true;
-        }
-      }
-      
-      // If still no match, try exact match in price_lookup
-      if (!foundMatch) {
-        const { data: exactLookup } = await supabase
-          .from('price_lookup')
-          .select('canonical_key')
-          .eq('canonical_key', itemName)
-          .limit(1)
-          .single();
-        
-        if (exactLookup?.canonical_key) {
-          canonicalKey = exactLookup.canonical_key;
-          foundMatch = true;
-        }
-      }
-      
-      // Only if no exact match, try partial match with ALL words from itemName
-      if (!foundMatch) {
-        const words = itemName.split(/\s+/).filter(w => w.length > 1);
-        
-        if (words.length > 0) {
-          // Build a query that requires ALL words to be present
-          let query = supabase
-            .from('chain_prices')
-            .select('canonical_key');
-          
-          // Add ilike condition for each word
-          words.forEach(word => {
-            query = query.ilike('canonical_key', `%${word}%`);
-          });
-          
-          const { data: partialMatch } = await query.limit(1).single();
-          
-          if (partialMatch?.canonical_key) {
-            canonicalKey = partialMatch.canonical_key;
-            foundMatch = true;
-          }
-        }
-      }
-      
-      setMatchedName(canonicalKey !== itemName ? canonicalKey : null);
-      
-      // Fetch chain prices using the resolved canonical_key
+      // Fetch chain prices using the canonical_key
       const { data, error } = await supabase
         .from('chain_prices')
         .select('chain_name, price_ils')
-        .eq('canonical_key', canonicalKey)
+        .eq('canonical_key', lookupKey)
         .order('price_ils', { ascending: true });
 
       if (error) throw error;
+      
+      console.log('[ChainPricePopup] Found prices:', data?.length || 0);
       
       // If no prices found and we should trigger web scrape
       if ((!data || data.length === 0) && triggerWebScrape) {
@@ -116,7 +57,7 @@ export const ChainPricePopup = memo(function ChainPricePopup({
         
         // Call smart-price-lookup to fetch and populate prices
         const { data: lookupResult, error: lookupError } = await supabase.functions.invoke('smart-price-lookup', {
-          body: { productName: itemName }
+          body: { productName: lookupKey }
         });
         
         if (lookupError) {
@@ -128,8 +69,10 @@ export const ChainPricePopup = memo(function ChainPricePopup({
         
         // If prices were found and saved, refetch from chain_prices
         if (lookupResult?.found && lookupResult?.chainPrices?.length > 0) {
-          const newCanonicalKey = lookupResult.canonicalName || itemName;
-          setMatchedName(newCanonicalKey !== itemName ? newCanonicalKey : null);
+          const newCanonicalKey = lookupResult.canonicalName || lookupKey;
+          if (newCanonicalKey !== itemName) {
+            setMatchedName(newCanonicalKey);
+          }
           
           const { data: newPrices } = await supabase
             .from('chain_prices')
@@ -165,7 +108,7 @@ export const ChainPricePopup = memo(function ChainPricePopup({
 
   useEffect(() => {
     fetchChainPrices(false);
-  }, [itemName]);
+  }, [canonicalKey]);
 
   const handleRetry = () => {
     setIsLoading(true);

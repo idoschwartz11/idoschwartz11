@@ -137,6 +137,7 @@ export const ShoppingItemRow = memo(function ShoppingItemRow({
         {showPricePopup && (
           <ChainPricePopup
             itemName={item.name}
+            canonicalKey={item.canonical_key}
             onClose={() => setShowPricePopup(false)}
           />
         )}
