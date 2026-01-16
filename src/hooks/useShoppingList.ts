@@ -13,6 +13,12 @@ interface PriceCacheEntry {
   cachedAt: number;
 }
 
+interface ResolveQueryResult {
+  resolved: string | null;
+  confidence: number;
+  source: string;
+}
+
 function loadPriceCache(): Map<string, PriceCacheEntry> {
   try {
     const stored = localStorage.getItem(PRICE_CACHE_KEY);
@@ -69,8 +75,8 @@ export function useShoppingList() {
   const pendingPricesRef = useRef<Set<string>>(new Set());
 
   // Fetch price from national average API
-  const fetchPrice = useCallback(async (itemName: string): Promise<number | null> => {
-    const normalized = normalizeQuery(itemName);
+  const fetchPrice = useCallback(async (canonicalKey: string): Promise<number | null> => {
+    const normalized = normalizeQuery(canonicalKey);
     if (!normalized) return null;
 
     // Check local cache
@@ -88,7 +94,7 @@ export function useShoppingList() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/national-average?query=${encodeURIComponent(itemName)}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/national-average?query=${encodeURIComponent(canonicalKey)}`,
         {
           method: 'GET',
           headers: {
@@ -130,10 +136,10 @@ export function useShoppingList() {
     ));
   }, []);
 
-  // Fetch prices for items that don't have them
+  // Fetch prices for items that don't have them (use canonical_key)
   const fetchMissingPrices = useCallback(async (itemsToFetch: ShoppingItem[]) => {
     for (const item of itemsToFetch) {
-      const normalized = normalizeQuery(item.name);
+      const normalized = normalizeQuery(item.canonical_key);
       const cached = priceCacheRef.current.get(normalized);
       
       if (cached) {
@@ -141,8 +147,8 @@ export function useShoppingList() {
           updateItemPrice(item.id, cached.avgPriceIls);
         }
       } else if (!pendingPricesRef.current.has(normalized)) {
-        // Fetch in background
-        fetchPrice(item.name).then(price => {
+        // Fetch in background using canonical_key
+        fetchPrice(item.canonical_key).then(price => {
           if (price !== null) {
             updateItemPrice(item.id, price);
           }
@@ -170,6 +176,11 @@ export function useShoppingList() {
           return {
             id: item.id,
             name: item.name,
+            userText: item.name,
+            resolvedCanonicalKey: null,
+            canonical_key: item.name,
+            resolveConfidence: 0,
+            resolveSource: 'prior',
             quantity: item.quantity,
             isBought: item.bought,
             orderIndex: 0,
@@ -214,6 +225,11 @@ export function useShoppingList() {
             const mappedItem: ShoppingItem = {
               id: newItem.id,
               name: newItem.name,
+              userText: newItem.name,
+              resolvedCanonicalKey: null,
+              canonical_key: newItem.name,
+              resolveConfidence: 0,
+              resolveSource: 'realtime',
               quantity: newItem.quantity,
               isBought: newItem.bought,
               orderIndex: 0,
@@ -270,30 +286,120 @@ export function useShoppingList() {
     saveHistory(history);
   }, [history]);
 
-  // Add new item
-  const addItem = useCallback(async (name: string, quantity: number = 1) => {
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
+  // Resolve query via RPC
+  const resolveQuery = useCallback(async (userText: string): Promise<ResolveQueryResult> => {
+    try {
+      const { data, error } = await supabase.rpc('resolve_query', { q: userText });
+      
+      if (error) {
+        console.error('resolve_query RPC error:', error);
+        return {
+          resolved: null,
+          confidence: 0,
+          source: 'rpc_error'
+        };
+      }
+      
+      // Parse the JSON response
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+      
+      return {
+        resolved: result?.resolved ?? null,
+        confidence: result?.confidence ?? 0,
+        source: result?.source ?? 'fallback'
+      };
+    } catch (error) {
+      console.error('resolve_query exception:', error);
+      return {
+        resolved: null,
+        confidence: 0,
+        source: 'rpc_error'
+      };
+    }
+  }, []);
+
+  // Add new item - simplified flow with resolve_query RPC
+  const addItem = useCallback(async (userText: string, quantity: number = 1) => {
+    const trimmedText = userText.trim();
+    if (!trimmedText) return;
+
+    // Call resolve_query RPC
+    const resolveResult = await resolveQuery(trimmedText);
+    
+    const category = getItemCategory(trimmedText);
+    const canonicalKey = resolveResult.resolved ?? trimmedText;
+    
+    // Create local item immediately for optimistic UI
+    const tempId = `${Date.now()}-${Math.random()}`;
+    const newLocalItem: ShoppingItem = {
+      id: tempId,
+      name: trimmedText,
+      userText: trimmedText,
+      resolvedCanonicalKey: resolveResult.resolved,
+      canonical_key: canonicalKey,
+      resolveConfidence: resolveResult.confidence,
+      resolveSource: resolveResult.source,
+      quantity: Math.max(1, quantity),
+      isBought: false,
+      orderIndex: 0,
+      priceEstimateIls: null,
+      categoryId: category.id,
+      categoryEmoji: category.emoji,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    // Add to local state immediately (optimistic update)
+    setItems(prev => [newLocalItem, ...prev]);
+
+    // Add to history if not exists
+    if (!history.some(h => h.toLowerCase() === trimmedText.toLowerCase())) {
+      setHistory(prev => [trimmedText, ...prev].slice(0, 100));
+    }
+
+    // Fetch price in background using canonical_key
+    fetchPrice(canonicalKey).then(price => {
+      if (price !== null) {
+        setItems(prev => prev.map(item => 
+          item.id === tempId ? { ...item, priceEstimateIls: price } : item
+        ));
+      }
+    });
 
     try {
-      const { error } = await supabase
+      // Insert into database (realtime will update with real ID)
+      const { data: insertedData, error } = await supabase
         .from('shopping_items')
         .insert({
-          name: trimmedName,
+          name: trimmedText,
           quantity: Math.max(1, quantity),
           bought: false,
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
-      // Add to history if not exists
-      if (!history.some(h => h.toLowerCase() === trimmedName.toLowerCase())) {
-        setHistory(prev => [trimmedName, ...prev].slice(0, 100));
+      // Replace temp item with real one
+      if (insertedData) {
+        setItems(prev => prev.map(item => {
+          if (item.id === tempId) {
+            return {
+              ...item,
+              id: insertedData.id,
+              createdAt: new Date(insertedData.created_at).getTime(),
+              updatedAt: new Date(insertedData.updated_at).getTime(),
+            };
+          }
+          return item;
+        }));
       }
     } catch (error) {
       console.error('Error adding item:', error);
+      // Remove optimistic item on error
+      setItems(prev => prev.filter(item => item.id !== tempId));
     }
-  }, [history]);
+  }, [history, resolveQuery, fetchPrice]);
 
   // Toggle bought status
   const toggleBought = useCallback(async (id: string) => {
@@ -447,15 +553,6 @@ export function useShoppingList() {
   const hasItemsWithPrices = unboughtItems.some(i => i.priceEstimateIls !== null);
   const hasItems = items.length > 0;
 
-  // Get suggestions for autocomplete
-  const getSuggestions = useCallback((query: string): string[] => {
-    if (!query.trim()) return [];
-    const lowerQuery = query.toLowerCase();
-    return history
-      .filter(h => h.toLowerCase().includes(lowerQuery))
-      .slice(0, 5);
-  }, [history]);
-
   // Get shareable list text
   const getShareableText = useCallback((): string => {
     if (unboughtItems.length === 0) return '';
@@ -490,7 +587,6 @@ export function useShoppingList() {
     undoDelete,
     dismissUndo,
     clearBoughtItems,
-    getSuggestions,
     getShareableText,
   };
 }
