@@ -29,7 +29,6 @@ function ShoppingListContent() {
     undoDelete,
     dismissUndo,
     clearBoughtItems,
-    getSuggestions,
     getShareableText,
   } = useShoppingList();
 
@@ -88,8 +87,7 @@ function ShoppingListContent() {
         {/* Add Item Input - hidden in clean mode */}
         {!isCleanMode && (
           <AddItemInput 
-            onAdd={addItem} 
-            getSuggestions={getSuggestions}
+            onAdd={addItem}
           />
         )}
 

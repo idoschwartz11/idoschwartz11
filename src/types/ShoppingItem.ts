@@ -1,6 +1,11 @@
 export interface ShoppingItem {
   id: string;
   name: string;
+  userText: string;
+  resolvedCanonicalKey: string | null;
+  canonical_key: string;
+  resolveConfidence: number;
+  resolveSource: string;
   quantity: number;
   isBought: boolean;
   orderIndex: number;

@@ -133,7 +133,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      resolve_query: { Args: { q: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
