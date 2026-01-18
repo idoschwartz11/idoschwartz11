@@ -3,13 +3,11 @@ import { Plus } from 'lucide-react';
 
 interface AddItemInputProps {
   onAdd: (name: string, quantity?: number) => void;
-  onRequestSizeSelection: (productName: string) => void;
   disabled?: boolean;
 }
 
 export const AddItemInput = memo(function AddItemInput({ 
   onAdd, 
-  onRequestSizeSelection,
   disabled 
 }: AddItemInputProps) {
   const [value, setValue] = useState('');
@@ -22,16 +20,12 @@ export const AddItemInput = memo(function AddItemInput({
   const handleSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
     if (value.trim() && !disabled) {
-      // Instead of adding directly, request size selection
-      onRequestSizeSelection(value.trim());
+      onAdd(value.trim());
       setValue('');
+      // Keep focus on input for quick successive adds
+      inputRef.current?.focus();
     }
-  }, [value, onRequestSizeSelection, disabled]);
-
-  // Public method to refocus after size selection
-  const refocus = useCallback(() => {
-    inputRef.current?.focus();
-  }, []);
+  }, [value, onAdd, disabled]);
 
   // Auto-focus on mount
   useEffect(() => {
