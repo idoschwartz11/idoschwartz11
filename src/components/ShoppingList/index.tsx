@@ -10,7 +10,9 @@ import { UndoToast } from './UndoToast';
 import { ShareSheet } from './ShareSheet';
 import { AISuggestions } from './AISuggestions';
 import { ImageScanner } from './ImageScanner';
+import { SizeSelectionSheet } from './SizeSelectionSheet';
 import { CleanListModeProvider, useCleanListMode } from '@/contexts/CleanListModeContext';
+import { getItemCategory } from '@/constants/priceTable';
 
 function ShoppingListContent() {
   const {
@@ -36,8 +38,36 @@ function ShoppingListContent() {
   const [showShareSheet, setShowShareSheet] = useState(false);
   const { isCleanMode } = useCleanListMode();
 
+  // Size selection state
+  const [sizeSelectionOpen, setSizeSelectionOpen] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<string>('');
+  const [pendingCategoryId, setPendingCategoryId] = useState<string>('other');
+
   const handleShare = useCallback(() => {
     setShowShareSheet(true);
+  }, []);
+
+  // Handler when user types a product and clicks "Add"
+  const handleRequestSizeSelection = useCallback((productName: string) => {
+    const category = getItemCategory(productName);
+    setPendingProduct(productName);
+    setPendingCategoryId(category.id);
+    setSizeSelectionOpen(true);
+  }, []);
+
+  // Handler when user selects a size (or skips)
+  const handleSizeSelected = useCallback((productWithSize: string) => {
+    addItem(productWithSize);
+    setSizeSelectionOpen(false);
+    setPendingProduct('');
+    setPendingCategoryId('other');
+  }, [addItem]);
+
+  // Handler to close size selection without adding
+  const handleSizeSelectionClose = useCallback(() => {
+    setSizeSelectionOpen(false);
+    setPendingProduct('');
+    setPendingCategoryId('other');
   }, []);
 
   // Memoize current item names for AI suggestions
@@ -88,6 +118,7 @@ function ShoppingListContent() {
         {!isCleanMode && (
           <AddItemInput 
             onAdd={addItem}
+            onRequestSizeSelection={handleRequestSizeSelection}
           />
         )}
 
@@ -148,6 +179,15 @@ function ShoppingListContent() {
           onClose={() => setShowShareSheet(false)} 
         />
       )}
+
+      {/* Size Selection Sheet */}
+      <SizeSelectionSheet
+        isOpen={sizeSelectionOpen}
+        productName={pendingProduct}
+        categoryId={pendingCategoryId}
+        onSelect={handleSizeSelected}
+        onClose={handleSizeSelectionClose}
+      />
     </div>
   );
 }
